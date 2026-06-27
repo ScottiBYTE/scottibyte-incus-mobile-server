@@ -1,0 +1,105 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>ScottiBYTE Incus Mobile Server</title>
+  <link rel="stylesheet" href="/public/admin.css">
+</head>
+<body>
+  <header>
+    <div>
+      <h1>ScottiBYTE Incus Mobile Server</h1>
+      <div class="subtitle">Mobile client authorization and Incus API status</div>
+    </div>
+    <button id="refreshBtn">Refresh</button>
+  </header>
+
+  <main>
+    <section class="summary-grid">
+      <div class="summary-card">
+        <div class="label">Instances</div>
+        <div class="value" id="instancesTotal">-</div>
+      </div>
+      <div class="summary-card good">
+        <div class="label">Running</div>
+        <div class="value" id="runningTotal">-</div>
+      </div>
+      <div class="summary-card bad">
+        <div class="label">Not Running</div>
+        <div class="value" id="notRunningTotal">-</div>
+      </div>
+      <div class="summary-card">
+        <div class="label">Remotes</div>
+        <div class="value" id="remoteTotal">-</div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="section-header">
+        <h2>Instances</h2>
+        <input id="searchBox" placeholder="Search host, instance, IP, MAC, status...">
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Host</th>
+              <th>Name</th>
+              <th>Type</th>
+              <th>Status</th>
+              <th>IP</th>
+              <th>MAC</th>
+              <th>Memory</th>
+              <th>Disk</th>
+              <th>Backups</th>
+              <th>Snapshots</th>
+            </tr>
+          </thead>
+          <tbody id="instanceRows">
+            <tr><td colspan="10">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Remotes</h2>
+      <div id="remoteList" class="remote-list">Loading...</div>
+    </section>
+
+    <section class="card">
+      <div class="section-header">
+        <h2>Mobile Clients</h2>
+        <button id="reloadClientsBtn">Reload Clients</button>
+      </div>
+
+      <p class="muted">Phones will appear here after they request pairing from the Android app.</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Device</th>
+              <th>Status</th>
+              <th>Role</th>
+              <th>App</th>
+              <th>Created</th>
+              <th>Last Seen</th>
+              <th>Last IP</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="clientRows">
+            <tr><td colspan="8">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div id="tokenBox" class="token-box hidden"></div>
+    </section>
+  </main>
+
+  <script src="/public/admin.js"></script>
+</body>
+</html>

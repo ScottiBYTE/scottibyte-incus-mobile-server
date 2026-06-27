@@ -1,0 +1,286 @@
+:root {
+  --bg: #101010;
+  --panel: #181818;
+  --panel2: #202020;
+  --border: #333;
+  --text: #f4f4f4;
+  --muted: #aaa;
+  --green: #58e36b;
+  --red: #ff6b6b;
+  --blue: #6bbcff;
+  --yellow: #ffd75e;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: Arial, sans-serif;
+}
+
+header {
+  padding: 18px 20px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 28px;
+}
+
+h2 {
+  margin-top: 0;
+}
+
+.subtitle {
+  color: var(--muted);
+  margin-top: 6px;
+}
+
+button {
+  background: #2457d6;
+  color: white;
+  border: 0;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+button:hover {
+  filter: brightness(1.1);
+}
+
+main {
+  padding: 18px;
+  display: grid;
+  gap: 16px;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(160px, 1fr));
+  gap: 14px;
+}
+
+.summary-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.summary-card .label {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.summary-card .value {
+  font-size: 34px;
+  font-weight: 800;
+  margin-top: 6px;
+}
+
+.summary-card.good .value {
+  color: var(--green);
+}
+
+.summary-card.bad .value {
+  color: var(--red);
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.section-header h2 {
+  margin: 0;
+}
+
+input {
+  background: #0a0a0a;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  min-width: 360px;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 1200px;
+}
+
+th, td {
+  border-bottom: 1px solid #2b2b2b;
+  padding: 10px 8px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+th {
+  color: #ddd;
+  background: var(--panel2);
+  position: sticky;
+  top: 0;
+}
+
+tr:hover td {
+  background: #1d1d1d;
+}
+
+.badge {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 4px 9px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.badge.host {
+  background: #09253a;
+  color: #75c8ff;
+  border: 1px solid #176091;
+}
+
+.badge.running {
+  background: #0b3512;
+  color: var(--green);
+  border: 1px solid #236d2f;
+}
+
+.badge.stopped {
+  background: #391111;
+  color: var(--red);
+  border: 1px solid #7a2b2b;
+}
+
+.badge.vm {
+  background: #251a3f;
+  color: #c7a5ff;
+  border: 1px solid #5d438d;
+}
+
+.badge.container {
+  background: #17301f;
+  color: #8dffa2;
+  border: 1px solid #376f45;
+}
+
+.remote-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.remote-pill {
+  background: #0a0a0a;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 8px 12px;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+@media (max-width: 800px) {
+  header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .summary-grid {
+    grid-template-columns: repeat(2, minmax(140px, 1fr));
+  }
+
+  .section-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  input {
+    min-width: unset;
+    width: 100%;
+  }
+}
+
+.action-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.small-btn {
+  font-size: 12px;
+  padding: 7px 10px;
+}
+
+.danger-btn {
+  background: #9c2727;
+}
+
+.viewer-btn {
+  background: #3a5d8f;
+}
+
+.operator-btn {
+  background: #247a3a;
+}
+
+.badge.pending {
+  background: #3d3210;
+  color: var(--yellow);
+  border: 1px solid #8a6b1f;
+}
+
+.badge.approved {
+  background: #0b3512;
+  color: var(--green);
+  border: 1px solid #236d2f;
+}
+
+.badge.revoked {
+  background: #391111;
+  color: var(--red);
+  border: 1px solid #7a2b2b;
+}
+
+.token-box {
+  margin-top: 14px;
+  background: #0a0a0a;
+  border: 1px solid #555;
+  border-radius: 8px;
+  padding: 12px;
+  color: #fff;
+  word-break: break-all;
+}
+
+.hidden {
+  display: none;
+}
