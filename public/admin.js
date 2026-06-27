@@ -89,8 +89,6 @@ function badge(text) {
 }
 
 function renderStatus() {
-  $('serverStatus').textContent = state.health?.ok ? 'Online' : 'Unknown';
-
   const actionsEl = $('actionsStatus');
   actionsEl.textContent = state.health?.actions_enabled ? 'Enabled' : 'Disabled';
   actionsEl.classList.remove('enabled', 'disabled');

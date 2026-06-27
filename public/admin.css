@@ -559,3 +559,44 @@ tbody tr:hover {
   background: var(--bad);
 }
 
+
+/* Stronger table headers */
+thead th {
+  font-size: 0.88rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #e0f2fe;
+  background: linear-gradient(180deg, #172033, #111827);
+  border-bottom: 1px solid rgba(56, 189, 248, 0.35);
+  text-transform: none;
+}
+
+tbody td {
+  font-size: 0.86rem;
+}
+
+thead th[data-sort]::after {
+  color: var(--accent);
+}
+
+
+#adminAccessStatus {
+  color: var(--good);
+}
+
+#statusCards .card:nth-child(1)::before {
+  background: var(--good);
+}
+
+#statusCards .card:nth-child(2)::before {
+  background: var(--good);
+}
+
+#actionsStatus.enabled {
+  color: var(--bad);
+}
+
+#actionsStatus.disabled {
+  color: var(--good);
+}
+
