@@ -10,11 +10,14 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "bcryptjs": "^3.0.3",
     "better-sqlite3": "^12.11.1",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "express-session": "^1.19.0",
     "helmet": "^8.2.0",
-    "nanoid": "^5.1.16"
+    "nanoid": "^5.1.16",
+    "speakeasy": "^2.0.0"
   }
 }
