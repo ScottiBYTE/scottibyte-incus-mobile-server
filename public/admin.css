@@ -467,3 +467,95 @@ tbody tr:hover {
   letter-spacing: 0.01em;
 }
 
+
+/* Instance summary color coding */
+#instancesTotal {
+  color: var(--accent);
+}
+
+#runningTotal {
+  color: var(--good);
+}
+
+#stoppedTotal {
+  color: var(--warn);
+}
+
+#containersTotal {
+  color: var(--accent);
+}
+
+#vmsTotal {
+  color: #c084fc;
+}
+
+#errorsTotal {
+  color: var(--good);
+}
+
+#errorsTotal.has-errors {
+  color: var(--bad);
+}
+
+#instancesTotal,
+#runningTotal,
+#stoppedTotal,
+#containersTotal,
+#vmsTotal,
+#errorsTotal {
+  letter-spacing: 0.01em;
+}
+
+/* Apply the same left-edge visual language to Instance Summary cards */
+.panel .cards .card {
+  position: relative;
+  overflow: hidden;
+}
+
+.panel .cards .card::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 5px;
+  background: var(--accent);
+  opacity: 0.9;
+}
+
+/* Instance Summary card colors */
+#instancesTotal.closest-card::before {
+  background: var(--accent);
+}
+
+
+#summaryCards .card::before {
+  background: var(--accent);
+}
+
+#summaryCards .card:nth-child(1)::before {
+  background: var(--accent);
+}
+
+#summaryCards .card:nth-child(2)::before {
+  background: var(--good);
+}
+
+#summaryCards .card:nth-child(3)::before {
+  background: var(--warn);
+}
+
+#summaryCards .card:nth-child(4)::before {
+  background: var(--accent);
+}
+
+#summaryCards .card:nth-child(5)::before {
+  background: #c084fc;
+}
+
+#summaryCards .card:nth-child(6)::before {
+  background: var(--good);
+}
+
+#summaryCards .card.has-errors::before {
+  background: var(--bad);
+}
+

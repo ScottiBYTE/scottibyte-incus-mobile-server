@@ -8,6 +8,15 @@ fs.mkdirSync(dataDir, { recursive: true });
 const dbPath = path.join(dataDir, 'mobile.db');
 const db = new Database(dbPath);
 
+
+function ensureColumn(table, column, definition) {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+
+  if (!columns.includes(column)) {
+    db.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`).run();
+  }
+}
+
 function initDb() {
   db.exec(`
     CREATE TABLE IF NOT EXISTS mobile_clients (
@@ -35,6 +44,8 @@ function initDb() {
       created_at TEXT NOT NULL
     );
   `);
+
+  ensureColumn('mobile_clients', 'display_name', 'TEXT');
 }
 
 module.exports = {

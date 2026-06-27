@@ -21,8 +21,8 @@
     <section class="panel">
       <div class="panel-heading">
         <div>
-          <h2>Server / Security Status</h2>
-          <p>Administrative controls are intended for LAN/VPN access only. Mobile API access is token based.</p>
+          <h2>Server / Access Status</h2>
+          <p>Admin console access is intended for LAN/VPN use. Mobile API access is token based.</p>
         </div>
       </div>
 
@@ -35,7 +35,7 @@
       </div>
     </section>
 
-    <section class="grid-two">
+    <section class="admin-stack">
       <section class="panel">
         <div class="panel-heading">
           <div>
@@ -83,11 +83,12 @@
           <div id="ignoredRemotesList" class="muted-list"></div>
         </details>
       </section>
+    </section>
 
-      <section class="panel">
-        <div class="panel-heading">
-          <div>
-            <h2>Mobile Client Authorization</h2>
+    <section class="panel">
+      <div class="panel-heading">
+        <div>
+          <h2>Mobile Client Authorization</h2>
             <p>Approve viewers, approve operators, or revoke mobile devices.</p>
           </div>
         </div>
@@ -106,7 +107,6 @@
             <tbody id="clientsBody"></tbody>
           </table>
         </div>
-      </section>
     </section>
 
     <section class="panel">
@@ -117,7 +117,7 @@
         </div>
       </div>
 
-      <div class="cards">
+      <div id="summaryCards" class="cards">
         <div class="card"><span>Total Instances</span><strong id="instancesTotal">-</strong></div>
         <div class="card"><span>Running</span><strong id="runningTotal">-</strong></div>
         <div class="card"><span>Stopped</span><strong id="stoppedTotal">-</strong></div>

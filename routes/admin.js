@@ -23,6 +23,7 @@ router.get('/clients', (req, res) => {
       id,
       device_id,
       device_name,
+      display_name,
       app_version,
       status,
       role,
@@ -95,6 +96,39 @@ router.post('/clients/:id/approve', (req, res) => {
     message: 'Device approved. The phone will receive its token the next time it checks pairing status.'
   });
 });
+
+
+router.post('/clients/:id/rename', (req, res) => {
+  const id = Number(req.params.id);
+  const displayName = String(req.body.display_name ?? '').trim();
+
+  if (displayName.length > 80) {
+    return res.status(400).json({
+      ok: false,
+      error: 'Display name must be 80 characters or less'
+    });
+  }
+
+  const result = db.prepare(`
+    UPDATE mobile_clients
+    SET display_name = ?
+    WHERE id = ?
+  `).run(displayName || null, id);
+
+  if (result.changes === 0) {
+    return res.status(404).json({
+      ok: false,
+      error: 'Client not found'
+    });
+  }
+
+  res.json({
+    ok: true,
+    id,
+    display_name: displayName || null
+  });
+});
+
 
 router.post('/clients/:id/revoke', (req, res) => {
   const id = Number(req.params.id);

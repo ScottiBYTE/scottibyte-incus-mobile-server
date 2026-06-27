@@ -111,7 +111,15 @@ function renderSummary() {
   $('stoppedTotal').textContent = s.stopped ?? '-';
   $('containersTotal').textContent = s.containers_total ?? '-';
   $('vmsTotal').textContent = s.virtual_machines_total ?? '-';
-  $('errorsTotal').textContent = s.errors ?? '-';
+  const errorsEl = $('errorsTotal');
+  errorsEl.textContent = s.errors ?? '-';
+  errorsEl.classList.toggle('has-errors', Number(s.errors || 0) > 0);
+
+  const summaryCards = $('summaryCards');
+  if (summaryCards) {
+    const errorCard = summaryCards.children[5];
+    if (errorCard) errorCard.classList.toggle('has-errors', Number(s.errors || 0) > 0);
+  }
 }
 
 function renderRemotes() {
@@ -247,14 +255,18 @@ function renderClients() {
   $('clientsBody').innerHTML = rows.map((c) => `
     <tr>
       <td>
-        <strong>${escapeHtml(c.device_name || c.device_id)}</strong><br>
-        <span class="note">${escapeHtml(c.device_id)}</span>
+        <strong>${escapeHtml(c.display_name || c.device_name || c.device_id)}</strong><br>
+        <span class="note">
+          ${escapeHtml(c.device_id)}
+          ${c.display_name && c.device_name ? `<br>reported as: ${escapeHtml(c.device_name)}` : ''}
+        </span>
       </td>
       <td>${badge(c.status)}</td>
       <td>${escapeHtml(c.role || '-')}</td>
       <td>${escapeHtml(c.last_seen_at || '-')}</td>
       <td>
         <div class="actions">
+          <button class="btn" onclick="renameClient(${c.id}, '${escapeHtml(c.display_name || c.device_name || '')}')">Rename</button>
           ${c.status === 'pending' ? `
             <button class="btn" onclick="approveClient(${c.id}, 'viewer')">Viewer</button>
             <button class="btn primary" onclick="approveClient(${c.id}, 'operator')">Operator</button>
@@ -384,6 +396,22 @@ async function deleteRemote(name) {
   } catch (err) {
     alert(err.message);
   }
+}
+
+async function renameClient(id, currentName) {
+  const nextName = prompt('Enter admin display name for this client. Leave blank to clear custom name.', currentName || '');
+
+  if (nextName === null) {
+    return;
+  }
+
+  await fetchJson(`/api/admin/clients/${id}/rename`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ display_name: nextName.trim() })
+  });
+
+  await loadData();
 }
 
 async function approveClient(id, role) {
