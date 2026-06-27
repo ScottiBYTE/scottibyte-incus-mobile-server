@@ -1088,3 +1088,34 @@ body.light-theme #vmsTotal {
   color: #9333ea;
 }
 
+
+/* Final light theme polish */
+body.light-theme .ignored-remotes summary {
+  color: #075985;
+}
+
+body.light-theme .ignored-remotes summary:hover {
+  color: #0369a1;
+  text-decoration: underline;
+}
+
+body.light-theme #remotesTable .add-row {
+  background: #e0f2fe !important;
+}
+
+body.light-theme #remotesTable .add-row td {
+  border-bottom-color: #38bdf8;
+}
+
+body.light-theme #remotesTable .add-row input {
+  background: #ffffff;
+  border-color: #7dd3fc;
+}
+
+body.light-theme .panel-heading h2,
+body.light-theme h1,
+body.light-theme h2,
+body.light-theme h3 {
+  color: #0f172a;
+}
+
