@@ -1,19 +1,24 @@
-let allInstances = [];
+let state = {
+  health: null,
+  summary: null,
+  remotes: [],
+  instances: [],
+  clients: [],
+  instanceSort: { key: 'remote', dir: 'asc' },
+  clientSort: { key: 'status', dir: 'asc' }
+};
 
-async function fetchJson(url) {
-  const res = await fetch(url);
-  if (!res.ok) {
-    throw new Error(`${url} returned HTTP ${res.status}`);
+function $(id) {
+  return document.getElementById(id);
+}
+
+async function fetchJson(url, options = {}) {
+  const res = await fetch(url, options);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data.ok === false) {
+    throw new Error(data.error || `${res.status} ${res.statusText}`);
   }
-  return res.json();
-}
-
-function setText(id, value) {
-  document.getElementById(id).textContent = value;
-}
-
-function badge(text, cls) {
-  return `<span class="badge ${cls}">${escapeHtml(text)}</span>`;
+  return data;
 }
 
 function escapeHtml(value) {
@@ -25,206 +30,268 @@ function escapeHtml(value) {
     .replaceAll("'", '&#039;');
 }
 
-function renderSummary(summary, remoteCount) {
-  setText('instancesTotal', summary.instances_total ?? '-');
-  setText('runningTotal', summary.running ?? '-');
-  setText('notRunningTotal', summary.not_running ?? '-');
-  setText('remoteTotal', remoteCount ?? '-');
+function normalizeRemotes(data) {
+  if (!data) return [];
+  if (Array.isArray(data.remotes)) {
+    return data.remotes.map((r) => typeof r === 'string' ? { name: r } : r);
+  }
+  if (Array.isArray(data.managed)) return data.managed;
+  if (typeof data.remotes === 'object') {
+    return Object.entries(data.remotes).map(([name, info]) => ({ name, ...info }));
+  }
+  return [];
 }
 
-function renderRemotes(remotes) {
-  const el = document.getElementById('remoteList');
+function getValue(row, key) {
+  switch (key) {
+    case 'memory_display':
+      return row.memory?.display || '';
+    case 'disk_display':
+      return row.disk?.display || '';
+    case 'backups_count':
+      return row.backups?.count ?? 0;
+    case 'snapshots_count':
+      return row.snapshots?.count ?? 0;
+    case 'cpu_percent':
+      return row.cpu?.percent ?? -1;
+    default:
+      return row[key] ?? '';
+  }
+}
 
-  if (!remotes.length) {
-    el.textContent = 'No remotes found.';
+function compareValues(a, b) {
+  const na = Number(a);
+  const nb = Number(b);
+
+  if (!Number.isNaN(na) && !Number.isNaN(nb) && String(a).trim() !== '' && String(b).trim() !== '') {
+    return na - nb;
+  }
+
+  return String(a ?? '').localeCompare(String(b ?? ''), undefined, {
+    numeric: true,
+    sensitivity: 'base'
+  });
+}
+
+function sortRows(rows, sort) {
+  return [...rows].sort((a, b) => {
+    const result = compareValues(getValue(a, sort.key), getValue(b, sort.key));
+    return sort.dir === 'asc' ? result : -result;
+  });
+}
+
+function badge(text) {
+  const cls = String(text || '').toLowerCase().replaceAll(' ', '-');
+  return `<span class="badge ${cls}">${escapeHtml(text || '-')}</span>`;
+}
+
+function renderStatus() {
+  $('serverStatus').textContent = state.health?.ok ? 'Online' : 'Unknown';
+  $('actionsStatus').textContent = state.health?.actions_enabled ? 'Enabled' : 'Disabled';
+  $('remoteCount').textContent = String(state.remotes.length);
+
+  const approved = state.clients.filter((c) => c.status === 'approved').length;
+  const pending = state.clients.filter((c) => c.status === 'pending').length;
+  $('approvedClientCount').textContent = String(approved);
+  $('pendingClientCount').textContent = String(pending);
+}
+
+function renderSummary() {
+  const s = state.summary || {};
+  $('instancesTotal').textContent = s.instances_total ?? '-';
+  $('runningTotal').textContent = s.running ?? '-';
+  $('stoppedTotal').textContent = s.stopped ?? '-';
+  $('containersTotal').textContent = s.containers_total ?? '-';
+  $('vmsTotal').textContent = s.virtual_machines_total ?? '-';
+  $('errorsTotal').textContent = s.errors ?? '-';
+}
+
+function renderRemotes() {
+  const el = $('remotesList');
+
+  if (!state.remotes.length) {
+    el.innerHTML = '<span class="pill">No managed remotes found</span>';
     return;
   }
 
-  el.innerHTML = remotes
-    .map(r => `<div class="remote-pill">${escapeHtml(r.name)} · ${escapeHtml(r.project)}</div>`)
+  el.innerHTML = state.remotes
+    .map((r) => `<span class="pill">${escapeHtml(r.name || r.remote || r)}</span>`)
     .join('');
 }
 
-function renderInstances() {
-  const tbody = document.getElementById('instanceRows');
-  const search = document.getElementById('searchBox').value.toLowerCase().trim();
+function renderRemoteFilter() {
+  const select = $('remoteFilter');
+  const current = select.value;
+  const remotes = [...new Set(state.instances.map((i) => i.remote).filter(Boolean))].sort();
 
-  const rows = allInstances.filter(i => {
-    if (!search) return true;
+  select.innerHTML = '<option value="">All remotes</option>' +
+    remotes.map((r) => `<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join('');
+
+  if (remotes.includes(current)) select.value = current;
+}
+
+function filteredInstances() {
+  const q = $('searchInput').value.trim().toLowerCase();
+  const remote = $('remoteFilter').value;
+  const status = $('statusFilter').value;
+  const type = $('typeFilter').value;
+
+  return state.instances.filter((i) => {
+    if (remote && i.remote !== remote) return false;
+    if (status && i.status !== status) return false;
+    if (type && i.type !== type) return false;
+
+    if (!q) return true;
 
     const haystack = [
-      i.remote,
-      i.project,
-      i.name,
-      i.type,
-      i.status,
-      i.primary_ipv4,
-      i.mac,
-      i.memory?.display,
-      i.disk?.display
+      i.id, i.remote, i.name, i.type, i.status, i.primary_ipv4,
+      i.memory?.display, i.disk?.display
     ].join(' ').toLowerCase();
 
-    return haystack.includes(search);
+    return haystack.includes(q);
+  });
+}
+
+function renderInstances() {
+  const rows = sortRows(filteredInstances(), state.instanceSort);
+
+  $('instancesBody').innerHTML = rows.map((i) => `
+    <tr>
+      <td>${escapeHtml(i.remote)}</td>
+      <td>${escapeHtml(i.name)}</td>
+      <td>${escapeHtml(i.type)}</td>
+      <td>${badge(i.status)}</td>
+      <td>${escapeHtml(i.primary_ipv4 || '-')}</td>
+      <td>${i.cpu?.percent == null ? '-' : escapeHtml(i.cpu.percent)}</td>
+      <td>${escapeHtml(i.memory?.display || '-')}</td>
+      <td>${escapeHtml(i.disk?.display || '-')}</td>
+      <td>${escapeHtml(i.backups?.count ?? 0)}</td>
+      <td>${escapeHtml(i.snapshots?.count ?? 0)}</td>
+    </tr>
+  `).join('');
+
+  updateSortIndicators('instancesTable', state.instanceSort);
+}
+
+function renderClients() {
+  const rows = sortRows(state.clients, state.clientSort);
+
+  $('clientsBody').innerHTML = rows.map((c) => `
+    <tr>
+      <td>
+        <strong>${escapeHtml(c.device_name || c.device_id)}</strong><br>
+        <span class="note">${escapeHtml(c.device_id)}</span>
+      </td>
+      <td>${badge(c.status)}</td>
+      <td>${escapeHtml(c.role || '-')}</td>
+      <td>${escapeHtml(c.last_seen_at || '-')}</td>
+      <td>
+        <div class="actions">
+          ${c.status === 'pending' ? `
+            <button class="btn" onclick="approveClient(${c.id}, 'viewer')">Viewer</button>
+            <button class="btn primary" onclick="approveClient(${c.id}, 'operator')">Operator</button>
+          ` : ''}
+          ${c.status === 'approved' ? `
+            <button class="btn danger" onclick="revokeClient(${c.id})">Revoke</button>
+          ` : ''}
+        </div>
+      </td>
+    </tr>
+  `).join('');
+
+  updateSortIndicators('clientsTable', state.clientSort);
+}
+
+function updateSortIndicators(tableId, sort) {
+  document.querySelectorAll(`#${tableId} thead th`).forEach((th) => {
+    const key = th.dataset.sort;
+    th.querySelectorAll('.sort-indicator').forEach((el) => el.remove());
+
+    if (key && key === sort.key) {
+      const span = document.createElement('span');
+      span.className = 'sort-indicator';
+      span.textContent = sort.dir === 'asc' ? '▲' : '▼';
+      th.appendChild(span);
+    }
+  });
+}
+
+function attachSortHandlers() {
+  document.querySelectorAll('#instancesTable th[data-sort]').forEach((th) => {
+    th.addEventListener('click', () => {
+      const key = th.dataset.sort;
+      state.instanceSort = {
+        key,
+        dir: state.instanceSort.key === key && state.instanceSort.dir === 'asc' ? 'desc' : 'asc'
+      };
+      renderInstances();
+    });
   });
 
-  if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="10">No matching instances.</td></tr>';
-    return;
-  }
-
-  tbody.innerHTML = rows.map(i => {
-    const typeClass = i.type === 'virtual-machine' ? 'vm' : 'container';
-    const statusClass = i.status === 'Running' ? 'running' : 'stopped';
-
-    return `
-      <tr>
-        <td>${badge(i.remote, 'host')}</td>
-        <td><strong>${escapeHtml(i.name)}</strong></td>
-        <td>${badge(i.type === 'virtual-machine' ? 'VM' : 'Container', typeClass)}</td>
-        <td>${badge(i.status, statusClass)}</td>
-        <td>${escapeHtml(i.primary_ipv4 || '')}</td>
-        <td>${escapeHtml(i.mac || '')}</td>
-        <td>${escapeHtml(i.memory?.display || '')}</td>
-        <td>${escapeHtml(i.disk?.display || '')}</td>
-        <td>${escapeHtml(i.backups?.count ?? 0)}</td>
-        <td>${escapeHtml(i.snapshots?.count ?? 0)}</td>
-      </tr>
-    `;
-  }).join('');
-}
-
-async function loadAll() {
-  const refreshBtn = document.getElementById('refreshBtn');
-  refreshBtn.disabled = true;
-  refreshBtn.textContent = 'Refreshing...';
-
-  try {
-    const [summaryData, remoteData, instanceData] = await Promise.all([
-      fetchJson('/api/mobile/summary'),
-      fetchJson('/api/mobile/remotes'),
-      fetchJson('/api/mobile/instances')
-    ]);
-
-    renderSummary(summaryData.summary, remoteData.remotes.length);
-    renderRemotes(remoteData.remotes);
-    allInstances = instanceData.instances || [];
-    renderInstances();
-  } catch (err) {
-    alert(err.message);
-  } finally {
-    refreshBtn.disabled = false;
-    refreshBtn.textContent = 'Refresh';
-  }
-}
-
-document.getElementById('refreshBtn').addEventListener('click', loadAll);
-document.getElementById('searchBox').addEventListener('input', renderInstances);
-
-loadAll();
-
-async function loadClients() {
-  const tbody = document.getElementById('clientRows');
-
-  if (!tbody) return;
-
-  try {
-    const data = await fetchJson('/api/admin/clients');
-    const clients = data.clients || [];
-
-    if (!clients.length) {
-      tbody.innerHTML = '<tr><td colspan="8">No mobile clients yet.</td></tr>';
-      return;
-    }
-
-    tbody.innerHTML = clients.map(c => {
-      const statusClass = c.status || 'pending';
-
-      let actions = '';
-
-      if (c.status === 'pending') {
-        actions = `
-          <div class="action-row">
-            <button class="small-btn viewer-btn" onclick="approveClient(${c.id}, 'viewer')">Approve Viewer</button>
-            <button class="small-btn operator-btn" onclick="approveClient(${c.id}, 'operator')">Approve Operator</button>
-            <button class="small-btn danger-btn" onclick="revokeClient(${c.id})">Reject</button>
-          </div>
-        `;
-      } else if (c.status === 'approved') {
-        actions = `
-          <div class="action-row">
-            <button class="small-btn danger-btn" onclick="revokeClient(${c.id})">Revoke</button>
-          </div>
-        `;
-      } else {
-        actions = '<span class="muted">No actions</span>';
-      }
-
-      return `
-        <tr>
-          <td><strong>${escapeHtml(c.device_name)}</strong><br><span class="muted">${escapeHtml(c.device_id)}</span></td>
-          <td>${badge(c.status, statusClass)}</td>
-          <td>${escapeHtml(c.role)}</td>
-          <td>${escapeHtml(c.app_version || '')}</td>
-          <td>${escapeHtml(c.created_at || '')}</td>
-          <td>${escapeHtml(c.last_seen_at || '')}</td>
-          <td>${escapeHtml(c.last_ip || '')}</td>
-          <td>${actions}</td>
-        </tr>
-      `;
-    }).join('');
-  } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="8">${escapeHtml(err.message)}</td></tr>`;
-  }
+  document.querySelectorAll('#clientsTable th[data-sort]').forEach((th) => {
+    th.addEventListener('click', () => {
+      const key = th.dataset.sort;
+      state.clientSort = {
+        key,
+        dir: state.clientSort.key === key && state.clientSort.dir === 'asc' ? 'desc' : 'asc'
+      };
+      renderClients();
+    });
+  });
 }
 
 async function approveClient(id, role) {
-  const res = await fetch(`/api/admin/clients/${id}/approve`, {
+  await fetchJson(`/api/admin/clients/${id}/approve`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ role })
   });
-
-  const data = await res.json();
-
-  if (!data.ok) {
-    alert(data.error || 'Failed to approve client');
-    return;
-  }
-
-  const tokenBox = document.getElementById('tokenBox');
-  tokenBox.classList.remove('hidden');
-  tokenBox.innerHTML = `
-    <strong>Device approved.</strong><br>
-    Role: ${escapeHtml(data.role)}<br><br>
-    <span class="muted">The phone will receive its token the next time it checks pairing status.</span>
-  `;
-
-  await loadClients();
+  await loadData();
 }
 
 async function revokeClient(id) {
-  if (!confirm('Revoke this mobile client?')) return;
-
-  const res = await fetch(`/api/admin/clients/${id}/revoke`, {
-    method: 'POST'
-  });
-
-  const data = await res.json();
-
-  if (!data.ok) {
-    alert(data.error || 'Failed to revoke client');
-    return;
-  }
-
-  await loadClients();
+  await fetchJson(`/api/admin/clients/${id}/revoke`, { method: 'POST' });
+  await loadData();
 }
 
-document.getElementById('reloadClientsBtn')?.addEventListener('click', loadClients);
+async function loadData() {
+  try {
+    const [health, summaryData, remotesData, instancesData, clientsData] = await Promise.all([
+      fetchJson('/api/mobile/health'),
+      fetchJson('/api/mobile/summary'),
+      fetchJson('/api/mobile/remotes'),
+      fetchJson('/api/mobile/instances'),
+      fetchJson('/api/admin/clients')
+    ]);
 
-const originalLoadAll = loadAll;
-loadAll = async function() {
-  await originalLoadAll();
-  await loadClients();
-};
+    state.health = health;
+    state.summary = summaryData.summary || {};
+    state.remotes = normalizeRemotes(remotesData);
+    state.instances = instancesData.instances || [];
+    state.clients = clientsData.clients || [];
 
-loadClients();
+    renderStatus();
+    renderSummary();
+    renderRemotes();
+    renderRemoteFilter();
+    renderClients();
+    renderInstances();
+  } catch (err) {
+    console.error(err);
+    alert(err.message);
+  }
+}
+
+function init() {
+  $('refreshBtn').addEventListener('click', loadData);
+
+  ['searchInput', 'remoteFilter', 'statusFilter', 'typeFilter'].forEach((id) => {
+    $(id).addEventListener('input', renderInstances);
+    $(id).addEventListener('change', renderInstances);
+  });
+
+  attachSortHandlers();
+  loadData();
+}
+
+document.addEventListener('DOMContentLoaded', init);

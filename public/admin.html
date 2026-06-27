@@ -1,102 +1,163 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <title>ScottiBYTE Incus Mobile Server</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="stylesheet" href="/public/admin.css">
 </head>
 <body>
-  <header>
+  <header class="topbar">
     <div>
       <h1>ScottiBYTE Incus Mobile Server</h1>
-      <div class="subtitle">Mobile client authorization and Incus API status</div>
+      <p class="subtitle">Admin Console for Incus mobile access, remote trust, and device authorization</p>
     </div>
-    <button id="refreshBtn">Refresh</button>
+    <div class="top-actions">
+      <button id="refreshBtn" class="btn">Refresh</button>
+    </div>
   </header>
 
-  <main>
-    <section class="summary-grid">
-      <div class="summary-card">
-        <div class="label">Instances</div>
-        <div class="value" id="instancesTotal">-</div>
+  <main class="page">
+    <section class="panel">
+      <div class="panel-heading">
+        <div>
+          <h2>Server / Security Status</h2>
+          <p>Administrative controls are intended for LAN/VPN access only. Mobile API access is token based.</p>
+        </div>
       </div>
-      <div class="summary-card good">
-        <div class="label">Running</div>
-        <div class="value" id="runningTotal">-</div>
-      </div>
-      <div class="summary-card bad">
-        <div class="label">Not Running</div>
-        <div class="value" id="notRunningTotal">-</div>
-      </div>
-      <div class="summary-card">
-        <div class="label">Remotes</div>
-        <div class="value" id="remoteTotal">-</div>
+
+      <div id="statusCards" class="cards">
+        <div class="card"><span>Server</span><strong id="serverStatus">Loading</strong></div>
+        <div class="card"><span>Mobile Actions</span><strong id="actionsStatus">Loading</strong></div>
+        <div class="card"><span>Managed Remotes</span><strong id="remoteCount">-</strong></div>
+        <div class="card"><span>Approved Clients</span><strong id="approvedClientCount">-</strong></div>
+        <div class="card"><span>Pending Clients</span><strong id="pendingClientCount">-</strong></div>
       </div>
     </section>
 
-    <section class="card">
-      <div class="section-header">
-        <h2>Instances</h2>
-        <input id="searchBox" placeholder="Search host, instance, IP, MAC, status...">
+    <section class="grid-two">
+      <section class="panel">
+        <div class="panel-heading">
+          <div>
+            <h2>Remote Management</h2>
+            <p>Add/remove remotes will use SSH-assisted Incus trust creation. Current list shows configured remotes.</p>
+          </div>
+        </div>
+
+        <div class="add-remote-placeholder">
+          <h3>Add Incus Remote</h3>
+          <div class="form-grid">
+            <label>Remote Name <input disabled placeholder="mondo"></label>
+            <label>Incus Host / Address <input disabled placeholder="mondo or 172.16.x.x"></label>
+            <label>Incus Port <input disabled placeholder="8443"></label>
+            <label>SSH User <input disabled placeholder="scott"></label>
+            <label>SSH Port <input disabled placeholder="22"></label>
+            <label>Trust Name <input disabled placeholder="IncusMobileServer"></label>
+          </div>
+          <div class="button-row">
+            <button class="btn" disabled>Test SSH</button>
+            <button class="btn primary" disabled>Add Remote</button>
+          </div>
+          <p class="note">Coming next: the server will SSH to the target Incus host, create trust, add the remote locally, and verify it.</p>
+        </div>
+
+        <h3>Configured Managed Remotes</h3>
+        <div id="remotesList" class="pill-list"></div>
+
+        <h3>Ignored Remotes</h3>
+        <div class="muted-list">
+          <div><strong>images</strong> — ignored because protocol is simplestreams / public image server</div>
+          <div><strong>local</strong> — ignored because it is the local/static Incus socket</div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <div>
+            <h2>Mobile Client Authorization</h2>
+            <p>Approve viewers, approve operators, or revoke mobile devices.</p>
+          </div>
+        </div>
+
+        <div class="table-wrap small-table">
+          <table id="clientsTable">
+            <thead>
+              <tr>
+                <th data-sort="device_name">Device</th>
+                <th data-sort="status">Status</th>
+                <th data-sort="role">Role</th>
+                <th data-sort="last_seen_at">Last Seen</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="clientsBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+
+    <section class="panel">
+      <div class="panel-heading">
+        <div>
+          <h2>Instance Summary</h2>
+          <p>At-a-glance inventory across configured Incus remotes.</p>
+        </div>
       </div>
 
-      <div class="table-wrap">
-        <table>
+      <div class="cards">
+        <div class="card"><span>Total Instances</span><strong id="instancesTotal">-</strong></div>
+        <div class="card"><span>Running</span><strong id="runningTotal">-</strong></div>
+        <div class="card"><span>Stopped</span><strong id="stoppedTotal">-</strong></div>
+        <div class="card"><span>Containers</span><strong id="containersTotal">-</strong></div>
+        <div class="card"><span>Virtual Machines</span><strong id="vmsTotal">-</strong></div>
+        <div class="card"><span>Errors</span><strong id="errorsTotal">-</strong></div>
+      </div>
+    </section>
+
+    <section class="panel inventory-panel">
+      <div class="panel-heading">
+        <div>
+          <h2>Instance Inventory</h2>
+          <p>Scrollable and sortable operational reference. Mobile access administration remains above.</p>
+        </div>
+      </div>
+
+      <div class="filters">
+        <input id="searchInput" placeholder="Search instances, remotes, IPs, status...">
+        <select id="remoteFilter">
+          <option value="">All remotes</option>
+        </select>
+        <select id="statusFilter">
+          <option value="">All statuses</option>
+          <option value="Running">Running</option>
+          <option value="Stopped">Stopped</option>
+        </select>
+        <select id="typeFilter">
+          <option value="">All types</option>
+          <option value="container">Containers</option>
+          <option value="virtual-machine">Virtual Machines</option>
+        </select>
+      </div>
+
+      <div class="table-wrap instance-table-wrap">
+        <table id="instancesTable">
           <thead>
             <tr>
-              <th>Host</th>
-              <th>Name</th>
-              <th>Type</th>
-              <th>Status</th>
-              <th>IP</th>
-              <th>MAC</th>
-              <th>Memory</th>
-              <th>Disk</th>
-              <th>Backups</th>
-              <th>Snapshots</th>
+              <th data-sort="remote">Remote</th>
+              <th data-sort="name">Name</th>
+              <th data-sort="type">Type</th>
+              <th data-sort="status">Status</th>
+              <th data-sort="primary_ipv4">IPv4</th>
+              <th data-sort="cpu_percent">CPU</th>
+              <th data-sort="memory_display">Memory</th>
+              <th data-sort="disk_display">Disk</th>
+              <th data-sort="backups_count">Backups</th>
+              <th data-sort="snapshots_count">Snapshots</th>
             </tr>
           </thead>
-          <tbody id="instanceRows">
-            <tr><td colspan="10">Loading...</td></tr>
-          </tbody>
+          <tbody id="instancesBody"></tbody>
         </table>
       </div>
-    </section>
-
-    <section class="card">
-      <h2>Remotes</h2>
-      <div id="remoteList" class="remote-list">Loading...</div>
-    </section>
-
-    <section class="card">
-      <div class="section-header">
-        <h2>Mobile Clients</h2>
-        <button id="reloadClientsBtn">Reload Clients</button>
-      </div>
-
-      <p class="muted">Phones will appear here after they request pairing from the Android app.</p>
-
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Device</th>
-              <th>Status</th>
-              <th>Role</th>
-              <th>App</th>
-              <th>Created</th>
-              <th>Last Seen</th>
-              <th>Last IP</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody id="clientRows">
-            <tr><td colspan="8">Loading...</td></tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div id="tokenBox" class="token-box hidden"></div>
     </section>
   </main>
 
