@@ -591,7 +591,6 @@ function initTheme() {
 function init() {
   initTheme();
 
-  $('refreshBtn').addEventListener('click', loadData);
   $('themeToggleBtn').addEventListener('click', toggleTheme);
 
   ['searchInput', 'remoteFilter', 'statusFilter', 'typeFilter'].forEach((id) => {

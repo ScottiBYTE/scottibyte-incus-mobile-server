@@ -846,3 +846,55 @@ body.light-theme .theme-btn {
   background: linear-gradient(180deg, #2563eb, #1d4ed8);
 }
 
+
+/* Match ScottiBYTE app header link style */
+.top-actions {
+  gap: 10px;
+}
+
+.github-btn,
+.donate-btn {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  min-height: auto !important;
+  border-radius: 0 !important;
+  font-size: 1.05rem;
+}
+
+.github-btn {
+  color: #38bdf8 !important;
+}
+
+.donate-btn {
+  color: #ff6b6b !important;
+}
+
+.github-btn:hover,
+.donate-btn:hover {
+  transform: none;
+  text-decoration: underline;
+}
+
+.theme-btn {
+  min-height: 34px;
+  padding: 7px 13px;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+#refreshBtn {
+  opacity: 0.75;
+  padding: 7px 11px;
+}
+
+body.light-theme .github-btn {
+  color: #0284c7 !important;
+}
+
+body.light-theme .donate-btn {
+  color: #dc2626 !important;
+}
+
