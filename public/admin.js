@@ -90,7 +90,12 @@ function badge(text) {
 
 function renderStatus() {
   $('serverStatus').textContent = state.health?.ok ? 'Online' : 'Unknown';
-  $('actionsStatus').textContent = state.health?.actions_enabled ? 'Enabled' : 'Disabled';
+
+  const actionsEl = $('actionsStatus');
+  actionsEl.textContent = state.health?.actions_enabled ? 'Enabled' : 'Disabled';
+  actionsEl.classList.remove('enabled', 'disabled');
+  actionsEl.classList.add(state.health?.actions_enabled ? 'enabled' : 'disabled');
+
   $('remoteCount').textContent = String(state.remotes.length);
 
   const approved = state.clients.filter((c) => c.status === 'approved').length;

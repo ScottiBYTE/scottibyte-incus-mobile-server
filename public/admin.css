@@ -358,3 +358,112 @@ tbody tr:hover {
   color: #fecaca;
 }
 
+
+.admin-stack {
+  display: block;
+}
+
+.remote-table-wrap {
+  max-height: 520px;
+}
+
+#remotesTable {
+  min-width: 1250px;
+}
+
+#remotesTable th,
+#remotesTable td {
+  white-space: nowrap;
+}
+
+#remotesTable td:nth-child(2) {
+  white-space: normal;
+  min-width: 240px;
+}
+
+#remotesTable .actions {
+  min-width: 150px;
+}
+
+
+/* Better table readability */
+tbody tr:nth-child(even) {
+  background: rgba(148, 163, 184, 0.045);
+}
+
+tbody tr:nth-child(odd) {
+  background: rgba(15, 23, 42, 0.18);
+}
+
+tbody tr:hover {
+  background: rgba(56, 189, 248, 0.10) !important;
+}
+
+/* Preserve add-row emphasis in the remote table */
+#remotesTable .add-row {
+  background: rgba(56, 189, 248, 0.07) !important;
+}
+
+/* Server/security status color coding */
+#serverStatus {
+  color: var(--good);
+}
+
+#actionsStatus {
+  color: var(--warn);
+}
+
+#actionsStatus.enabled {
+  color: var(--bad);
+}
+
+#actionsStatus.disabled {
+  color: var(--good);
+}
+
+#remoteCount {
+  color: var(--accent);
+}
+
+#approvedClientCount {
+  color: var(--good);
+}
+
+#pendingClientCount {
+  color: var(--warn);
+}
+
+#statusCards .card {
+  position: relative;
+  overflow: hidden;
+}
+
+#statusCards .card::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 5px;
+  background: var(--accent);
+  opacity: 0.9;
+}
+
+#statusCards .card:nth-child(1)::before {
+  background: var(--good);
+}
+
+#statusCards .card:nth-child(2)::before {
+  background: var(--warn);
+}
+
+#statusCards .card:nth-child(4)::before {
+  background: var(--good);
+}
+
+#statusCards .card:nth-child(5)::before {
+  background: var(--warn);
+}
+
+#statusCards .card strong {
+  letter-spacing: 0.01em;
+}
+
