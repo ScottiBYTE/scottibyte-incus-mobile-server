@@ -88,6 +88,32 @@ function badge(text) {
   return `<span class="badge ${cls}">${escapeHtml(text || '-')}</span>`;
 }
 
+function bubble(value, type = 'neutral') {
+  return `<span class="bubble ${escapeHtml(type)}">${escapeHtml(value || '-')}</span>`;
+}
+
+function statusBubble(status) {
+  const value = String(status || '-');
+  if (value === 'Running' || value === 'approved' || value === 'Online') return bubble(value, 'good');
+  if (value === 'Stopped' || value === 'revoked' || value === 'Offline') return bubble(value, 'bad');
+  if (value === 'pending' || value === 'Not tested') return bubble(value, 'warn');
+  return bubble(value, 'neutral');
+}
+
+function roleBubble(role) {
+  if (role === 'operator') return bubble(role, 'purple');
+  if (role === 'viewer') return bubble(role, 'remote');
+  return bubble(role || '-', 'neutral');
+}
+
+function metricBubble(value) {
+  const raw = String(value || '-');
+  if (raw === '-' || raw === '0 B') return bubble(raw, 'neutral');
+  if (raw.includes('GB')) return bubble(raw, 'warn');
+  return bubble(raw, 'good');
+}
+
+
 function renderStatus() {
   const actionsEl = $('actionsStatus');
   actionsEl.textContent = state.health?.actions_enabled ? 'Enabled' : 'Disabled';
@@ -141,17 +167,17 @@ function renderRemotes() {
   const remoteRows = rows.map((r) => {
     const test = state.remoteTests[r.name];
     const status = test
-      ? (test.reachable ? '<span class="status-ok">Online</span>' : '<span class="status-bad">Offline</span>')
-      : '<span class="note">Not tested</span>';
+      ? (test.reachable ? statusBubble('Online') : statusBubble('Offline'))
+      : statusBubble('Not tested');
 
     const count = test && test.reachable ? test.instances_count : '-';
 
     return `
       <tr>
-        <td><strong>${escapeHtml(r.name)}</strong></td>
+        <td>${bubble(r.name, 'remote')}</td>
         <td>${escapeHtml(r.addr || '-')}</td>
-        <td>${escapeHtml(r.protocol || '-')}</td>
-        <td>${escapeHtml(r.auth_type || '-')}</td>
+        <td>${bubble(r.protocol || '-', 'neutral')}</td>
+        <td>${bubble(r.auth_type || '-', 'neutral')}</td>
         <td>${escapeHtml(r.project || 'default')}</td>
         <td>${status}</td>
         <td>${escapeHtml(count)}</td>
@@ -232,14 +258,14 @@ function renderInstances() {
 
   $('instancesBody').innerHTML = rows.map((i) => `
     <tr>
-      <td>${escapeHtml(i.remote)}</td>
+      <td>${bubble(i.remote, 'remote')}</td>
       <td>${escapeHtml(i.name)}</td>
-      <td>${escapeHtml(i.type)}</td>
-      <td>${badge(i.status)}</td>
-      <td>${escapeHtml(i.primary_ipv4 || '-')}</td>
-      <td>${i.cpu?.percent == null ? '-' : escapeHtml(i.cpu.percent)}</td>
-      <td>${escapeHtml(i.memory?.display || '-')}</td>
-      <td>${escapeHtml(i.disk?.display || '-')}</td>
+      <td>${bubble(i.type, i.type === 'virtual-machine' ? 'purple' : 'neutral')}</td>
+      <td>${statusBubble(i.status)}</td>
+      <td>${i.primary_ipv4 ? bubble(i.primary_ipv4, 'ip') : '-'}</td>
+      <td>${i.cpu?.percent == null ? '-' : bubble(i.cpu.percent, 'good')}</td>
+      <td>${metricBubble(i.memory?.display || '-')}</td>
+      <td>${metricBubble(i.disk?.display || '-')}</td>
       <td>${escapeHtml(i.backups?.count ?? 0)}</td>
       <td>${escapeHtml(i.snapshots?.count ?? 0)}</td>
     </tr>
@@ -261,8 +287,8 @@ function renderClients() {
           ${c.display_name && c.device_name ? `<br>reported as: ${escapeHtml(c.device_name)}` : ''}
         </span>
       </td>
-      <td>${badge(c.status)}</td>
-      <td>${escapeHtml(c.role || '-')}</td>
+      <td>${statusBubble(c.status)}</td>
+      <td>${roleBubble(c.role)}</td>
       <td>${escapeHtml(c.last_seen_at || '-')}</td>
       <td>
         <div class="actions">
@@ -540,8 +566,33 @@ function attachTableSelection() {
   });
 }
 
+
+function applyTheme(theme) {
+  const effective = theme === 'light' ? 'light' : 'dark';
+  document.body.classList.toggle('light-theme', effective === 'light');
+
+  const btn = $('themeToggleBtn');
+  if (btn) {
+    btn.textContent = effective === 'light' ? '🌙 Dark' : '☀ Light';
+  }
+
+  localStorage.setItem('scottibyteIncusMobileTheme', effective);
+}
+
+function toggleTheme() {
+  const current = localStorage.getItem('scottibyteIncusMobileTheme') || 'dark';
+  applyTheme(current === 'light' ? 'dark' : 'light');
+}
+
+function initTheme() {
+  applyTheme(localStorage.getItem('scottibyteIncusMobileTheme') || 'dark');
+}
+
 function init() {
+  initTheme();
+
   $('refreshBtn').addEventListener('click', loadData);
+  $('themeToggleBtn').addEventListener('click', toggleTheme);
 
   ['searchInput', 'remoteFilter', 'statusFilter', 'typeFilter'].forEach((id) => {
     $(id).addEventListener('input', renderInstances);
