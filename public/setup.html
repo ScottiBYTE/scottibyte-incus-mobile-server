@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>ScottiBYTE Incus Mobile Server Setup</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #111827;
+      --border: #253047;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --accent: #38bdf8;
+      --good: #22c55e;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: radial-gradient(circle at top left, #1e293b, var(--bg) 42%);
+      color: var(--text);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .setup {
+      width: min(620px, calc(100vw - 32px));
+      background: linear-gradient(180deg, rgba(17,24,39,0.98), rgba(15,23,42,0.98));
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 24px;
+      box-shadow: 0 18px 48px rgba(0,0,0,0.35);
+    }
+
+    h1 {
+      margin: 0 0 6px;
+      font-size: 1.45rem;
+    }
+
+    h2 {
+      margin: 0 0 8px;
+      font-size: 1.2rem;
+    }
+
+    p {
+      margin: 0 0 18px;
+      color: var(--muted);
+    }
+
+    label {
+      display: block;
+      margin: 12px 0 5px;
+      color: var(--muted);
+      font-size: 0.86rem;
+    }
+
+    input, textarea {
+      width: 100%;
+      box-sizing: border-box;
+      background: #020617;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 11px;
+      font-size: 1rem;
+    }
+
+    textarea {
+      min-height: 70px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+
+    button, .link-btn {
+      margin-top: 18px;
+      width: 100%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      box-sizing: border-box;
+      border: 1px solid rgba(96,165,250,0.75);
+      background: linear-gradient(180deg, #2563eb, #1d4ed8);
+      color: white;
+      border-radius: 10px;
+      padding: 11px;
+      font-weight: 800;
+      cursor: pointer;
+      text-decoration: none;
+    }
+
+    .error {
+      display: none;
+      margin-top: 12px;
+      color: #fecaca;
+      background: rgba(127,29,29,0.35);
+      border: 1px solid rgba(239,68,68,0.55);
+      border-radius: 10px;
+      padding: 10px;
+    }
+
+    .success {
+      display: none;
+      margin-top: 18px;
+      border-top: 1px solid var(--border);
+      padding-top: 18px;
+    }
+
+    .instructions {
+      margin: 12px 0 18px;
+      padding: 14px;
+      border: 1px solid rgba(56,189,248,0.35);
+      background: rgba(14,116,144,0.16);
+      border-radius: 12px;
+      color: var(--text);
+    }
+
+    .instructions ol {
+      margin: 0;
+      padding-left: 20px;
+    }
+
+    .instructions li {
+      margin: 6px 0;
+    }
+
+    .qr-wrap {
+      display: flex;
+      justify-content: center;
+      margin: 16px 0;
+      padding: 16px;
+      border-radius: 14px;
+      background: #ffffff;
+    }
+
+    .qr-wrap img {
+      width: 220px;
+      height: 220px;
+      display: block;
+    }
+
+    .secret-row {
+      display: flex;
+      gap: 8px;
+      align-items: stretch;
+    }
+
+    .secret-row input {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+    }
+
+    .copy-btn {
+      margin: 0;
+      width: auto;
+      white-space: nowrap;
+      padding-left: 16px;
+      padding-right: 16px;
+      min-width: 82px;
+    }
+
+    details {
+      margin-top: 14px;
+      color: var(--muted);
+    }
+
+    details summary {
+      cursor: pointer;
+      color: var(--accent);
+      font-weight: 700;
+    }
+
+    .note {
+      margin-top: 14px;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+
+    .warning {
+      margin-top: 14px;
+      color: #fde68a;
+      background: rgba(146,64,14,0.25);
+      border: 1px solid rgba(245,158,11,0.45);
+      border-radius: 10px;
+      padding: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="setup">
+    <form id="setupForm" method="post" action="/api/admin/auth/setup">
+      <h1>Initial Admin Setup</h1>
+      <p>Create the first local admin account. Credentials and 2FA secret are stored in SQLite, not .env.</p>
+
+      <label for="username">Username</label>
+      <input id="username" name="username" type="text" autocomplete="username" required>
+
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="new-password" required>
+
+      <label for="confirmPassword">Confirm Password</label>
+      <input id="confirmPassword" name="password_confirmation" type="password" autocomplete="new-password" required>
+
+      <button type="submit">Create Admin</button>
+      <div id="error" class="error"></div>
+    </form>
+
+    <div id="success" class="success">
+      <h1>2FA Setup</h1>
+      <p>Your admin account was created. Now add 2FA to your authenticator app.</p>
+
+      <div class="instructions">
+        <ol>
+          <li>Open your authenticator app.</li>
+          <li>Choose <strong>Add account</strong> or <strong>Scan QR code</strong>.</li>
+          <li>Scan the QR code below.</li>
+          <li>If scanning does not work, manually enter the Manual Secret.</li>
+          <li>Save the Manual Secret in your password manager. It will not be shown again.</li>
+        </ol>
+      </div>
+
+      <div class="qr-wrap">
+        <img id="qrCode" alt="2FA QR code">
+      </div>
+
+      <label for="totpSecret">Manual Secret</label>
+      <div class="secret-row">
+        <input id="totpSecret" readonly>
+        <button id="copySecretBtn" class="copy-btn" type="button">Copy</button>
+      </div>
+
+      <details>
+        <summary>Advanced: otpauth URL</summary>
+        <p class="note">The otpauth URL is what the QR code contains. Most users do not need to copy it manually.</p>
+        <textarea id="otpauthUrl" readonly></textarea>
+      </details>
+
+      <div class="warning">
+        Do not continue until the account is added to your authenticator app.
+      </div>
+
+      <label for="verifyToken">Enter the current 6-digit 2FA code to verify setup</label>
+      <input id="verifyToken" name="otp" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="123456">
+
+      <button id="verifyTotpBtn" type="button">Verify 2FA and Continue</button>
+      <div id="verifyError" class="error"></div>
+
+      <a id="loginLink" class="link-btn" href="/admin/login" style="display:none;">Go to Login</a>
+    </div>
+  </div>
+
+  <script>
+    const form = document.getElementById('setupForm');
+    const error = document.getElementById('error');
+    const success = document.getElementById('success');
+    const copySecretBtn = document.getElementById('copySecretBtn');
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      error.style.display = 'none';
+
+      const body = {
+        username: document.getElementById('username').value.trim(),
+        password: document.getElementById('password').value,
+        confirm_password: document.getElementById('confirmPassword').value
+      };
+
+      const res = await fetch('/api/admin/auth/setup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || data.ok === false) {
+        error.textContent = data.error || 'Setup failed';
+        error.style.display = 'block';
+        return;
+      }
+
+      document.getElementById('totpSecret').value = data.totp_secret || '';
+      document.getElementById('otpauthUrl').value = data.otpauth_url || '';
+      document.getElementById('qrCode').src = data.qr_data_url || '';
+      success.dataset.username = data.username || body.username;
+      form.style.display = 'none';
+      success.style.display = 'block';
+    });
+
+    function showCopyFeedback(message) {
+      copySecretBtn.textContent = message;
+      setTimeout(() => {
+        copySecretBtn.textContent = 'Copy';
+      }, 1800);
+    }
+
+    async function copyTextFromInput(input) {
+      input.focus();
+      input.select();
+      input.setSelectionRange(0, input.value.length);
+
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(input.value);
+        return true;
+      }
+
+      return document.execCommand('copy');
+    }
+
+
+    const verifyTotpBtn = document.getElementById('verifyTotpBtn');
+    const verifyError = document.getElementById('verifyError');
+    const loginLink = document.getElementById('loginLink');
+
+    verifyTotpBtn.addEventListener('click', async () => {
+      verifyError.style.display = 'none';
+
+      const body = {
+        username: success.dataset.username || '',
+        token: document.getElementById('verifyToken').value.trim()
+      };
+
+      const res = await fetch('/api/admin/auth/setup/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || data.ok === false) {
+        verifyError.textContent = data.error || '2FA verification failed';
+        verifyError.style.display = 'block';
+        return;
+      }
+
+      verifyTotpBtn.textContent = '2FA Verified';
+      verifyTotpBtn.disabled = true;
+      document.getElementById('verifyToken').disabled = true;
+      loginLink.style.display = 'inline-flex';
+    });
+
+    copySecretBtn.addEventListener('click', async () => {
+      const input = document.getElementById('totpSecret');
+
+      try {
+        const copied = await copyTextFromInput(input);
+
+        if (copied) {
+          showCopyFeedback('Copied!');
+        } else {
+          showCopyFeedback('Select + Ctrl+C');
+        }
+      } catch (err) {
+        showCopyFeedback('Select + Ctrl+C');
+      }
+    });
+  </script>
+</body>
+</html>

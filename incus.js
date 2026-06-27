@@ -12,12 +12,6 @@ function runIncus(args, timeoutMs = 30000) {
   });
 }
 
-function getConfiguredRemoteAllowlist() {
-  const raw = process.env.INCUS_REMOTES || '';
-  return raw.split(',').map(s => s.trim()).filter(Boolean);
-}
-
-
 async function getRemotes() {
   const inventory = await getRemoteInventory();
   return inventory.managed.map((remote) => ({

@@ -588,10 +588,25 @@ function initTheme() {
   applyTheme(localStorage.getItem('scottibyteIncusMobileTheme') || 'dark');
 }
 
+
+async function logoutAdmin() {
+  try {
+    await fetch('/api/admin/auth/logout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+  } catch (err) {
+    // Even if the request fails, send the browser back to login.
+  }
+
+  window.location.href = '/admin/login';
+}
+
 function init() {
   initTheme();
 
   $('themeToggleBtn').addEventListener('click', toggleTheme);
+  $('logoutBtn').addEventListener('click', logoutAdmin);
 
   ['searchInput', 'remoteFilter', 'statusFilter', 'typeFilter'].forEach((id) => {
     $(id).addEventListener('input', renderInstances);

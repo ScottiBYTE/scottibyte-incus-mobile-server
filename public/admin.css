@@ -1119,3 +1119,29 @@ body.light-theme h3 {
   color: #0f172a;
 }
 
+
+/* Logout button */
+.logout-btn {
+  color: #fecaca;
+  background: transparent !important;
+  border: 1px solid rgba(239, 68, 68, 0.45) !important;
+  box-shadow: none !important;
+}
+
+.logout-btn:hover {
+  color: #ffffff;
+  background: rgba(127, 29, 29, 0.45) !important;
+  border-color: rgba(239, 68, 68, 0.75) !important;
+}
+
+body.light-theme .logout-btn {
+  color: #b91c1c !important;
+  background: transparent !important;
+  border-color: rgba(220, 38, 38, 0.5) !important;
+}
+
+body.light-theme .logout-btn:hover {
+  color: #ffffff !important;
+  background: #dc2626 !important;
+}
+
