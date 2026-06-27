@@ -784,3 +784,65 @@ body.light-theme .bubble.neutral {
   background: rgba(226, 232, 240, 0.9);
 }
 
+
+/* ScottiBYTE-style toolbar buttons */
+.toolbar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 7px 13px;
+  border-radius: 9px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: linear-gradient(180deg, #1f2937, #111827);
+  color: var(--text);
+  text-decoration: none;
+  font-weight: 800;
+  font-size: 0.95rem;
+  line-height: 1;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.06),
+    0 8px 18px rgba(0,0,0,0.22);
+  cursor: pointer;
+}
+
+.toolbar-btn:hover {
+  transform: translateY(-1px);
+  border-color: rgba(56, 189, 248, 0.65);
+}
+
+.github-btn {
+  color: #7dd3fc;
+  border-color: rgba(125, 211, 252, 0.35);
+}
+
+.donate-btn {
+  color: #ff7b7b;
+  border-color: rgba(239, 68, 68, 0.42);
+}
+
+.theme-btn {
+  color: #ffffff;
+  background: linear-gradient(180deg, #2563eb, #1d4ed8);
+  border-color: rgba(96, 165, 250, 0.75);
+}
+
+body.light-theme .toolbar-btn {
+  background: linear-gradient(180deg, #f8fafc, #e2e8f0);
+  color: #0f172a;
+  border-color: rgba(100, 116, 139, 0.35);
+}
+
+body.light-theme .github-btn {
+  color: #0369a1;
+}
+
+body.light-theme .donate-btn {
+  color: #dc2626;
+}
+
+body.light-theme .theme-btn {
+  color: #ffffff;
+  background: linear-gradient(180deg, #2563eb, #1d4ed8);
+}
+
