@@ -40,35 +40,48 @@
         <div class="panel-heading">
           <div>
             <h2>Remote Management</h2>
-            <p>Add/remove remotes will use SSH-assisted Incus trust creation. Current list shows configured remotes.</p>
+            <p>Add authorized Incus servers, test existing remotes, or remove remotes from this server.</p>
           </div>
         </div>
 
-        <div class="add-remote-placeholder">
-          <h3>Add Incus Remote</h3>
-          <div class="form-grid">
-            <label>Remote Name <input disabled placeholder="mondo"></label>
-            <label>Incus Host / Address <input disabled placeholder="mondo or 172.16.x.x"></label>
-            <label>Incus Port <input disabled placeholder="8443"></label>
-            <label>SSH User <input disabled placeholder="scott"></label>
-            <label>SSH Port <input disabled placeholder="22"></label>
-            <label>Trust Name <input disabled placeholder="IncusMobileServer"></label>
-          </div>
-          <div class="button-row">
-            <button class="btn" disabled>Test SSH</button>
-            <button class="btn primary" disabled>Add Remote</button>
-          </div>
-          <p class="note">Coming next: the server will SSH to the target Incus host, create trust, add the remote locally, and verify it.</p>
+        <div class="table-wrap remote-table-wrap">
+          <table id="remotesTable">
+            <thead>
+              <tr>
+                <th data-sort="name">Name</th>
+                <th data-sort="addr">Address</th>
+                <th data-sort="protocol">Protocol</th>
+                <th data-sort="auth_type">Auth</th>
+                <th data-sort="project">Project</th>
+                <th>Status</th>
+                <th>Instances</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="remotesBody">
+              <tr class="add-row">
+                <td><input id="newRemoteName" placeholder="mondo"></td>
+                <td><input id="newRemoteHost" placeholder="mondo or 172.16.x.x"></td>
+                <td><input id="newRemoteIncusPort" placeholder="8443"></td>
+                <td><input id="newRemoteSshUser" placeholder="scott"></td>
+                <td><input id="newRemoteSshPort" placeholder="22"></td>
+                <td><input id="newRemoteTrustName" placeholder="IncusMobileServer"></td>
+                <td colspan="2">
+                  <button id="addRemoteBtn" class="btn primary">Add Remote</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
 
-        <h3>Configured Managed Remotes</h3>
-        <div id="remotesList" class="pill-list"></div>
+        <p class="note remote-note">
+          Add Remote will SSH to the target host, create Incus trust, add the remote locally, and verify it.
+        </p>
 
-        <h3>Ignored Remotes</h3>
-        <div class="muted-list">
-          <div><strong>images</strong> — ignored because protocol is simplestreams / public image server</div>
-          <div><strong>local</strong> — ignored because it is the local/static Incus socket</div>
-        </div>
+        <details class="ignored-remotes">
+          <summary>Ignored Remotes</summary>
+          <div id="ignoredRemotesList" class="muted-list"></div>
+        </details>
       </section>
 
       <section class="panel">

@@ -4,8 +4,11 @@ let state = {
   remotes: [],
   instances: [],
   clients: [],
+  ignoredRemotes: [],
+  remoteTests: {},
   instanceSort: { key: 'remote', dir: 'asc' },
-  clientSort: { key: 'status', dir: 'asc' }
+  clientSort: { key: 'status', dir: 'asc' },
+  remoteSort: { key: 'name', dir: 'asc' }
 };
 
 function $(id) {
@@ -32,10 +35,10 @@ function escapeHtml(value) {
 
 function normalizeRemotes(data) {
   if (!data) return [];
+  if (Array.isArray(data.managed)) return data.managed;
   if (Array.isArray(data.remotes)) {
     return data.remotes.map((r) => typeof r === 'string' ? { name: r } : r);
   }
-  if (Array.isArray(data.managed)) return data.managed;
   if (typeof data.remotes === 'object') {
     return Object.entries(data.remotes).map(([name, info]) => ({ name, ...info }));
   }
@@ -107,16 +110,76 @@ function renderSummary() {
 }
 
 function renderRemotes() {
-  const el = $('remotesList');
+  const rows = sortRows(state.remotes, state.remoteSort);
+  const tbody = $('remotesBody');
 
-  if (!state.remotes.length) {
-    el.innerHTML = '<span class="pill">No managed remotes found</span>';
+  const addRow = `
+    <tr class="add-row">
+      <td><input id="newRemoteName" placeholder="mondo"></td>
+      <td><input id="newRemoteHost" placeholder="mondo or 172.16.x.x"></td>
+      <td><input id="newRemoteIncusPort" placeholder="8443"></td>
+      <td><input id="newRemoteSshUser" placeholder="scott"></td>
+      <td><input id="newRemoteSshPort" placeholder="22"></td>
+      <td><input id="newRemoteTrustName" placeholder="IncusMobileServer"></td>
+      <td colspan="2">
+        <button id="addRemoteBtn" class="btn primary">Add Remote</button>
+      </td>
+    </tr>
+  `;
+
+  const remoteRows = rows.map((r) => {
+    const test = state.remoteTests[r.name];
+    const status = test
+      ? (test.reachable ? '<span class="status-ok">Online</span>' : '<span class="status-bad">Offline</span>')
+      : '<span class="note">Not tested</span>';
+
+    const count = test && test.reachable ? test.instances_count : '-';
+
+    return `
+      <tr>
+        <td><strong>${escapeHtml(r.name)}</strong></td>
+        <td>${escapeHtml(r.addr || '-')}</td>
+        <td>${escapeHtml(r.protocol || '-')}</td>
+        <td>${escapeHtml(r.auth_type || '-')}</td>
+        <td>${escapeHtml(r.project || 'default')}</td>
+        <td>${status}</td>
+        <td>${escapeHtml(count)}</td>
+        <td>
+          <div class="actions">
+            <button class="btn" onclick="testRemote('${escapeHtml(r.name)}')">Test</button>
+            <button class="btn danger" onclick="deleteRemote('${escapeHtml(r.name)}')">Delete</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  tbody.innerHTML = addRow + remoteRows;
+
+  const addBtn = $('addRemoteBtn');
+  if (addBtn) addBtn.addEventListener('click', addRemote);
+
+  renderIgnoredRemotes();
+  updateSortIndicators('remotesTable', state.remoteSort);
+}
+
+function renderIgnoredRemotes() {
+  const el = $('ignoredRemotesList');
+  if (!el) return;
+
+  if (!state.ignoredRemotes.length) {
+    el.innerHTML = '<div>No ignored remotes.</div>';
     return;
   }
 
-  el.innerHTML = state.remotes
-    .map((r) => `<span class="pill">${escapeHtml(r.name || r.remote || r)}</span>`)
-    .join('');
+  el.innerHTML = state.ignoredRemotes.map((r) => `
+    <div>
+      <strong>${escapeHtml(r.name)}</strong>
+      — ${escapeHtml(r.addr || '-')}
+      — ${escapeHtml(r.protocol || '-')}
+      — ${escapeHtml(r.reason || 'Ignored')}
+    </div>
+  `).join('');
 }
 
 function renderRemoteFilter() {
@@ -238,6 +301,84 @@ function attachSortHandlers() {
       renderClients();
     });
   });
+
+  document.querySelectorAll('#remotesTable th[data-sort]').forEach((th) => {
+    th.addEventListener('click', () => {
+      const key = th.dataset.sort;
+      state.remoteSort = {
+        key,
+        dir: state.remoteSort.key === key && state.remoteSort.dir === 'asc' ? 'desc' : 'asc'
+      };
+      renderRemotes();
+    });
+  });
+}
+
+async function addRemote() {
+  const payload = {
+    name: $('newRemoteName').value.trim(),
+    host: $('newRemoteHost').value.trim(),
+    incus_port: $('newRemoteIncusPort').value.trim() || '8443',
+    ssh_user: $('newRemoteSshUser').value.trim(),
+    ssh_port: $('newRemoteSshPort').value.trim() || '22',
+    trust_name: $('newRemoteTrustName').value.trim() || 'IncusMobileServer'
+  };
+
+  if (!payload.name || !payload.host || !payload.ssh_user) {
+    alert('Remote name, Incus host/address, and SSH user are required.');
+    return;
+  }
+
+  const btn = $('addRemoteBtn');
+  btn.disabled = true;
+  btn.textContent = 'Adding...';
+
+  try {
+    await fetchJson('/api/admin/remotes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    await loadData();
+  } catch (err) {
+    alert(err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Add Remote';
+  }
+}
+
+async function testRemote(name) {
+  try {
+    const data = await fetchJson(`/api/admin/remotes/${encodeURIComponent(name)}/test`, {
+      method: 'POST'
+    });
+
+    state.remoteTests[name] = data.test;
+    renderRemotes();
+  } catch (err) {
+    state.remoteTests[name] = {
+      reachable: false,
+      error: err.message
+    };
+    renderRemotes();
+  }
+}
+
+async function deleteRemote(name) {
+  if (!confirm(`Remove Incus remote "${name}" from this server?`)) {
+    return;
+  }
+
+  try {
+    await fetchJson(`/api/admin/remotes/${encodeURIComponent(name)}`, {
+      method: 'DELETE'
+    });
+    delete state.remoteTests[name];
+    await loadData();
+  } catch (err) {
+    alert(err.message);
+  }
 }
 
 async function approveClient(id, role) {
@@ -259,7 +400,7 @@ async function loadData() {
     const [health, summaryData, remotesData, instancesData, clientsData] = await Promise.all([
       fetchJson('/api/mobile/health'),
       fetchJson('/api/mobile/summary'),
-      fetchJson('/api/mobile/remotes'),
+      fetchJson('/api/admin/remotes'),
       fetchJson('/api/mobile/instances'),
       fetchJson('/api/admin/clients')
     ]);
@@ -267,6 +408,7 @@ async function loadData() {
     state.health = health;
     state.summary = summaryData.summary || {};
     state.remotes = normalizeRemotes(remotesData);
+    state.ignoredRemotes = remotesData.ignored || [];
     state.instances = instancesData.instances || [];
     state.clients = clientsData.clients || [];
 

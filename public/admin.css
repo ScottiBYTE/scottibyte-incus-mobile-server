@@ -311,3 +311,50 @@ tbody tr:hover {
     flex-direction: column;
   }
 }
+
+.remote-table-wrap {
+  max-height: 420px;
+}
+
+#remotesTable {
+  min-width: 980px;
+}
+
+#remotesTable input {
+  min-width: 120px;
+  margin-top: 0;
+  padding: 7px 8px;
+}
+
+#remotesTable .add-row {
+  background: rgba(56, 189, 248, 0.04);
+}
+
+#remotesTable .add-row td {
+  border-bottom: 1px solid rgba(56, 189, 248, 0.24);
+}
+
+.remote-note {
+  margin-top: 10px;
+}
+
+.ignored-remotes {
+  margin-top: 12px;
+  color: var(--muted);
+}
+
+.ignored-remotes summary {
+  cursor: pointer;
+  color: #c7d2fe;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.status-ok {
+  color: #bbf7d0;
+}
+
+.status-bad {
+  color: #fecaca;
+}
+
