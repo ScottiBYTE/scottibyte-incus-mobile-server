@@ -20,3 +20,6 @@ npm-debug.log*
 .DS_Store
 .vscode/
 .idea/
+
+# Local patch backups
+backups/

@@ -1,6 +1,7 @@
 const express = require('express');
 const crypto = require('crypto');
 const { db } = require('../db');
+const { getRemoteInventory, addRemoteViaSsh, removeRemote, testRemote } = require('../incus');
 
 const router = express.Router();
 
@@ -151,5 +152,72 @@ router.post('/clients/:id/role', (req, res) => {
     role: requestedRole
   });
 });
+
+
+router.get('/remotes', async (req, res) => {
+  try {
+    const inventory = await getRemoteInventory();
+
+    res.json({
+      ok: true,
+      managed: inventory.managed,
+      ignored: inventory.ignored
+    });
+  } catch (err) {
+    res.status(500).json({
+      ok: false,
+      error: err.message
+    });
+  }
+});
+
+router.post('/remotes', async (req, res) => {
+  try {
+    const result = await addRemoteViaSsh({
+      name: req.body.name,
+      host: req.body.host || req.body.addr,
+      incus_port: req.body.incus_port,
+      ssh_user: req.body.ssh_user,
+      ssh_port: req.body.ssh_port,
+      trust_name: req.body.trust_name
+    });
+
+    res.json({
+      ok: true,
+      remote: result
+    });
+  } catch (err) {
+    res.status(400).json({
+      ok: false,
+      error: err.message
+    });
+  }
+});
+
+router.post('/remotes/:name/test', async (req, res) => {
+  const result = await testRemote(req.params.name);
+
+  res.status(result.ok ? 200 : 502).json({
+    ok: result.ok,
+    test: result
+  });
+});
+
+router.delete('/remotes/:name', async (req, res) => {
+  try {
+    const result = await removeRemote(req.params.name);
+
+    res.json({
+      ok: true,
+      result
+    });
+  } catch (err) {
+    res.status(400).json({
+      ok: false,
+      error: err.message
+    });
+  }
+});
+
 
 module.exports = router;

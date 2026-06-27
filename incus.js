@@ -17,35 +17,264 @@ function getConfiguredRemoteAllowlist() {
   return raw.split(',').map(s => s.trim()).filter(Boolean);
 }
 
+
 async function getRemotes() {
+  const inventory = await getRemoteInventory();
+  return inventory.managed.map((remote) => ({
+    name: remote.name,
+    addr: remote.addr,
+    protocol: remote.protocol,
+    auth_type: remote.auth_type,
+    project: remote.project || 'default'
+  }));
+}
+
+function normalizeRemoteEntry(name, remote) {
+  return {
+    name,
+    addr: remote.Addr || remote.addr || '',
+    protocol: remote.Protocol || remote.protocol || '',
+    auth_type: remote.AuthType || remote.auth_type || '',
+    project: remote.Project || remote.project || 'default',
+    public: Boolean(remote.Public ?? remote.public),
+    static: Boolean(remote.Static ?? remote.static),
+    global: Boolean(remote.Global ?? remote.global)
+  };
+}
+
+function getIgnoreReason(remote) {
+  if (remote.name === 'local') return 'Ignored local/static Incus socket';
+  if (remote.static) return 'Ignored static Incus remote';
+  if (remote.public) return 'Ignored public remote';
+  if (remote.protocol === 'simplestreams') return 'Ignored simplestreams image server';
+  if (remote.protocol !== 'incus') return `Ignored unsupported protocol: ${remote.protocol || 'unknown'}`;
+  if (remote.auth_type !== 'tls') return `Ignored unsupported auth type: ${remote.auth_type || 'none'}`;
+  return null;
+}
+
+function isManagedRemote(remote) {
+  return getIgnoreReason(remote) === null;
+}
+
+async function getRemoteInventory() {
   const stdout = await runIncus(['remote', 'list', '--format', 'json']);
   const data = JSON.parse(stdout);
-  const allowlist = getConfiguredRemoteAllowlist();
 
-  return Object.entries(data)
-    .filter(([name, remote]) => {
-      const protocol = remote.Protocol || remote.protocol;
-      const isPublic = remote.Public ?? remote.public;
-      const isStatic = remote.Static ?? remote.static;
+  const managed = [];
+  const ignored = [];
 
-      if (name === 'images') return false;
-      if (name === 'local') return false;
-      if (isPublic) return false;
-      if (isStatic) return false;
-      if (protocol !== 'incus') return false;
-      if (allowlist.length > 0 && !allowlist.includes(name)) return false;
+  for (const [name, raw] of Object.entries(data)) {
+    const remote = normalizeRemoteEntry(name, raw);
+    const reason = getIgnoreReason(remote);
 
-      return true;
-    })
-    .map(([name, remote]) => ({
-      name,
-      addr: remote.Addr || remote.addr,
-      protocol: remote.Protocol || remote.protocol,
-      auth_type: remote.AuthType || remote.auth_type || null,
-      project: remote.Project || remote.project || 'default'
-    }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+    if (reason) {
+      ignored.push({ ...remote, reason });
+    } else {
+      managed.push(remote);
+    }
+  }
+
+  managed.sort((a, b) => a.name.localeCompare(b.name));
+  ignored.sort((a, b) => a.name.localeCompare(b.name));
+
+  return { managed, ignored };
 }
+
+function validateRemoteName(name) {
+  const value = String(name || '').trim();
+
+  if (!value) {
+    throw new Error('Remote name is required');
+  }
+
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,62}$/.test(value)) {
+    throw new Error('Remote name may only contain letters, numbers, dots, underscores, and hyphens');
+  }
+
+  if (['local', 'images'].includes(value)) {
+    throw new Error(`Remote name "${value}" is reserved`);
+  }
+
+  return value;
+}
+
+function normalizeHost(hostOrUrl) {
+  const value = String(hostOrUrl || '').trim();
+
+  if (!value) {
+    throw new Error('Incus host or address is required');
+  }
+
+  if (value.startsWith('https://')) {
+    const url = new URL(value);
+    return {
+      host: url.hostname,
+      incusUrl: value.replace(/\/$/, '')
+    };
+  }
+
+  if (value.includes('://')) {
+    throw new Error('Only https:// URLs are supported for Incus remotes');
+  }
+
+  return {
+    host: value,
+    incusUrl: null
+  };
+}
+
+function normalizePort(value, defaultPort) {
+  const port = Number(value || defaultPort);
+
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error(`Invalid port: ${value}`);
+  }
+
+  return port;
+}
+
+function parseTrustToken(output) {
+  const text = String(output || '');
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const candidates = [];
+
+  for (const line of lines) {
+    const matches = line.match(/[A-Za-z0-9._~+/=-]{40,}/g);
+    if (matches) candidates.push(...matches);
+  }
+
+  const preferred = candidates.find((token) => token.startsWith('eyJ'));
+  const token = preferred || candidates[candidates.length - 1];
+
+  if (!token) {
+    throw new Error(`Unable to parse trust token from SSH output: ${text}`);
+  }
+
+  return token;
+}
+
+async function runSsh(args, timeoutMs = 30000) {
+  return new Promise((resolve, reject) => {
+    execFile('ssh', args, { timeout: timeoutMs }, (error, stdout, stderr) => {
+      if (error) {
+        reject(new Error(stderr || stdout || error.message));
+        return;
+      }
+      resolve(`${stdout || ''}${stderr || ''}`);
+    });
+  });
+}
+
+async function addRemoteViaSsh(options = {}) {
+  const name = validateRemoteName(options.name);
+  const incusPort = normalizePort(options.incus_port, 8443);
+  const sshPort = normalizePort(options.ssh_port, 22);
+  const sshUser = String(options.ssh_user || '').trim();
+  const trustName = String(options.trust_name || 'IncusMobileServer').trim();
+
+  if (!sshUser) {
+    throw new Error('SSH user is required');
+  }
+
+  if (!trustName) {
+    throw new Error('Trust name is required');
+  }
+
+  const { host, incusUrl } = normalizeHost(options.host || options.addr);
+  const finalIncusUrl = incusUrl || `https://${host}:${incusPort}`;
+
+  const inventory = await getRemoteInventory();
+  if (inventory.managed.some((r) => r.name === name) || inventory.ignored.some((r) => r.name === name)) {
+    throw new Error(`Remote "${name}" already exists`);
+  }
+
+  const sshTarget = `${sshUser}@${host}`;
+  const sshOutput = await runSsh([
+    '-p', String(sshPort),
+    '-o', 'BatchMode=yes',
+    '-o', 'StrictHostKeyChecking=accept-new',
+    sshTarget,
+    'incus', 'config', 'trust', 'add', trustName
+  ], 30000);
+
+  const token = parseTrustToken(sshOutput);
+
+  await runIncus([
+    'remote', 'add',
+    name,
+    finalIncusUrl,
+    '--accept-certificate',
+    '--token',
+    token
+  ], 30000);
+
+  const test = await testRemote(name);
+
+  return {
+    ok: true,
+    name,
+    addr: finalIncusUrl,
+    test
+  };
+}
+
+async function removeRemote(name) {
+  const safeName = validateRemoteName(name);
+  const inventory = await getRemoteInventory();
+
+  const managed = inventory.managed.find((r) => r.name === safeName);
+  const ignored = inventory.ignored.find((r) => r.name === safeName);
+
+  if (ignored) {
+    throw new Error(`Refusing to remove ignored/reserved remote "${safeName}": ${ignored.reason}`);
+  }
+
+  if (!managed) {
+    throw new Error(`Managed remote "${safeName}" not found`);
+  }
+
+  await runIncus(['remote', 'remove', safeName], 30000);
+
+  return {
+    ok: true,
+    name: safeName,
+    removed: true
+  };
+}
+
+async function testRemote(name) {
+  const safeName = validateRemoteName(name);
+
+  try {
+    const stdout = await runIncus([
+      'list',
+      `${safeName}:`,
+      '--format',
+      'json'
+    ], 30000);
+
+    const instances = JSON.parse(stdout);
+
+    return {
+      ok: true,
+      name: safeName,
+      reachable: true,
+      instances_count: Array.isArray(instances) ? instances.length : 0
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      name: safeName,
+      reachable: false,
+      error: err.message
+    };
+  }
+}
+
 
 async function getInstancesForRemote(remote) {
   const stdout = await runIncus([
@@ -372,5 +601,9 @@ module.exports = {
   getRemotes,
   getAllInstances,
   runInstanceAction,
-  parseInstanceId
+  parseInstanceId,
+  getRemoteInventory,
+  addRemoteViaSsh,
+  removeRemote,
+  testRemote
 };
