@@ -600,3 +600,41 @@ thead th[data-sort]::after {
   color: var(--good);
 }
 
+
+/* Selectable table rows */
+.table-wrap {
+  outline: none;
+}
+
+tbody tr {
+  cursor: pointer;
+}
+
+tbody tr.selected-row {
+  background: rgba(56, 189, 248, 0.22) !important;
+  outline: 1px solid rgba(56, 189, 248, 0.65);
+  outline-offset: -1px;
+}
+
+tbody tr.selected-row td:first-child {
+  box-shadow: inset 5px 0 0 var(--accent);
+}
+
+tbody tr.selected-row:hover {
+  background: rgba(56, 189, 248, 0.28) !important;
+}
+
+/* Stronger table headers */
+thead th {
+  font-size: 0.9rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #e0f2fe;
+  background: linear-gradient(180deg, #172033, #111827);
+  border-bottom: 1px solid rgba(56, 189, 248, 0.35);
+}
+
+tbody td {
+  font-size: 0.86rem;
+}
+

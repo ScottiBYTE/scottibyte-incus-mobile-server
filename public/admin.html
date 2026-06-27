@@ -22,12 +22,12 @@
       <div class="panel-heading">
         <div>
           <h2>Server / Access Status</h2>
-          <p>Admin console access is intended for LAN/VPN use. Mobile API access is token based.</p>
+          <p>Admin console access is LAN/VPN only unless strong admin authentication and 2FA are enabled. Mobile API access is token based.</p>
         </div>
       </div>
 
       <div id="statusCards" class="cards">
-        <div class="card"><span>Admin Access</span><strong id="adminAccessStatus">LAN/VPN Only</strong></div>
+        <div class="card"><span>Admin Console Access</span><strong id="adminAccessStatus">LAN/VPN Only</strong></div>
         <div class="card"><span>Instance Actions</span><strong id="actionsStatus">Loading</strong></div>
         <div class="card"><span>Managed Remotes</span><strong id="remoteCount">-</strong></div>
         <div class="card"><span>Approved Clients</span><strong id="approvedClientCount">-</strong></div>
@@ -44,7 +44,7 @@
           </div>
         </div>
 
-        <div class="table-wrap remote-table-wrap">
+        <div class="table-wrap remote-table-wrap selectable-table" tabindex="0" data-table="remotesTable">
           <table id="remotesTable">
             <thead>
               <tr>
@@ -93,7 +93,7 @@
           </div>
         </div>
 
-        <div class="table-wrap small-table">
+        <div class="table-wrap small-table selectable-table" tabindex="0" data-table="clientsTable">
           <table id="clientsTable">
             <thead>
               <tr>
@@ -152,7 +152,7 @@
         </select>
       </div>
 
-      <div class="table-wrap instance-table-wrap">
+      <div class="table-wrap instance-table-wrap selectable-table" tabindex="0" data-table="instancesTable">
         <table id="instancesTable">
           <thead>
             <tr>

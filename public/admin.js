@@ -172,6 +172,7 @@ function renderRemotes() {
 
   renderIgnoredRemotes();
   updateSortIndicators('remotesTable', state.remoteSort);
+  reapplyTableSelection('remotesTable');
 }
 
 function renderIgnoredRemotes() {
@@ -245,6 +246,7 @@ function renderInstances() {
   `).join('');
 
   updateSortIndicators('instancesTable', state.instanceSort);
+  reapplyTableSelection('instancesTable');
 }
 
 function renderClients() {
@@ -278,6 +280,7 @@ function renderClients() {
   `).join('');
 
   updateSortIndicators('clientsTable', state.clientSort);
+  reapplyTableSelection('clientsTable');
 }
 
 function updateSortIndicators(tableId, sort) {
@@ -455,6 +458,88 @@ async function loadData() {
   }
 }
 
+
+const selectedRows = {};
+
+function getSelectableRows(tableId) {
+  return Array.from(document.querySelectorAll(`#${tableId} tbody tr`))
+    .filter((row) => !row.classList.contains('add-row'));
+}
+
+function selectTableRow(tableId, index) {
+  const rows = getSelectableRows(tableId);
+  if (!rows.length) return;
+
+  const safeIndex = Math.max(0, Math.min(index, rows.length - 1));
+  selectedRows[tableId] = safeIndex;
+
+  rows.forEach((row, i) => {
+    row.classList.toggle('selected-row', i === safeIndex);
+  });
+
+  rows[safeIndex].scrollIntoView({
+    block: 'nearest',
+    inline: 'nearest'
+  });
+}
+
+function clearTableSelection(tableId) {
+  selectedRows[tableId] = null;
+  getSelectableRows(tableId).forEach((row) => row.classList.remove('selected-row'));
+}
+
+function reapplyTableSelection(tableId) {
+  const rows = getSelectableRows(tableId);
+  const current = selectedRows[tableId];
+
+  if (current === null || current === undefined || !rows.length) return;
+
+  selectTableRow(tableId, Math.min(current, rows.length - 1));
+}
+
+function attachTableSelection() {
+  document.querySelectorAll('.selectable-table').forEach((wrap) => {
+    const tableId = wrap.dataset.table;
+    if (!tableId) return;
+
+    wrap.addEventListener('click', (event) => {
+      const row = event.target.closest('tbody tr');
+      if (!row || row.classList.contains('add-row')) return;
+
+      const rows = getSelectableRows(tableId);
+      const index = rows.indexOf(row);
+      if (index >= 0) {
+        selectTableRow(tableId, index);
+        wrap.focus();
+      }
+    });
+
+    wrap.addEventListener('keydown', (event) => {
+      const rows = getSelectableRows(tableId);
+      if (!rows.length) return;
+
+      const current = selectedRows[tableId] ?? 0;
+
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        selectTableRow(tableId, current + 1);
+      } else if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        selectTableRow(tableId, current - 1);
+      } else if (event.key === 'Home') {
+        event.preventDefault();
+        selectTableRow(tableId, 0);
+      } else if (event.key === 'End') {
+        event.preventDefault();
+        selectTableRow(tableId, rows.length - 1);
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        clearTableSelection(tableId);
+      }
+    });
+  });
+}
+
 function init() {
   $('refreshBtn').addEventListener('click', loadData);
 
@@ -464,6 +549,7 @@ function init() {
   });
 
   attachSortHandlers();
+  attachTableSelection();
   loadData();
 }
 
