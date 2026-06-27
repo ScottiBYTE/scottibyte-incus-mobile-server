@@ -898,3 +898,193 @@ body.light-theme .donate-btn {
   color: #dc2626 !important;
 }
 
+
+/* Light theme contrast improvements */
+body.light-theme {
+  --text: #0b1220;
+  --muted: #334155;
+  --border: #94a3b8;
+  background: linear-gradient(180deg, #dbe4ee, #f8fafc);
+}
+
+body.light-theme .topbar {
+  background: #f8fafc;
+  border-bottom-color: #cbd5e1;
+}
+
+body.light-theme .panel {
+  background: #ffffff;
+  border-color: #cbd5e1;
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.16);
+}
+
+body.light-theme .subtitle,
+body.light-theme .panel-heading p,
+body.light-theme .note,
+body.light-theme .muted-list,
+body.light-theme label {
+  color: #334155;
+}
+
+body.light-theme .card {
+  background: #ffffff;
+  border-color: #cbd5e1;
+}
+
+body.light-theme .card span {
+  color: #475569;
+}
+
+body.light-theme input,
+body.light-theme select {
+  background: #ffffff;
+  color: #0f172a;
+  border-color: #94a3b8;
+}
+
+body.light-theme input::placeholder {
+  color: #64748b;
+}
+
+body.light-theme .table-wrap {
+  background: #ffffff;
+  border-color: #94a3b8;
+}
+
+body.light-theme table {
+  color: #0f172a;
+}
+
+body.light-theme thead th {
+  background: linear-gradient(180deg, #cbd5e1, #b6c2d0);
+  color: #0f172a;
+  border-bottom: 1px solid #64748b;
+}
+
+body.light-theme th,
+body.light-theme td {
+  border-bottom-color: #94a3b8;
+}
+
+body.light-theme tbody tr:nth-child(odd) {
+  background: #ffffff;
+}
+
+body.light-theme tbody tr:nth-child(even) {
+  background: #eef2f7;
+}
+
+body.light-theme tbody tr:hover {
+  background: #dbeafe !important;
+}
+
+body.light-theme tbody tr.selected-row {
+  background: #bae6fd !important;
+  outline-color: #0284c7;
+}
+
+body.light-theme .bubble {
+  font-weight: 800;
+  border-width: 1px;
+}
+
+body.light-theme .bubble.remote {
+  color: #075985;
+  background: #bae6fd;
+  border-color: #38bdf8;
+}
+
+body.light-theme .bubble.ip {
+  color: #86198f;
+  background: #f5d0fe;
+  border-color: #d946ef;
+}
+
+body.light-theme .bubble.good {
+  color: #14532d;
+  background: #86efac;
+  border-color: #22c55e;
+}
+
+body.light-theme .bubble.warn {
+  color: #78350f;
+  background: #fde68a;
+  border-color: #f59e0b;
+}
+
+body.light-theme .bubble.bad {
+  color: #7f1d1d;
+  background: #fecaca;
+  border-color: #ef4444;
+}
+
+body.light-theme .bubble.neutral {
+  color: #0f172a;
+  background: #dbe4ee;
+  border-color: #94a3b8;
+}
+
+body.light-theme .bubble.purple {
+  color: #581c87;
+  background: #e9d5ff;
+  border-color: #a855f7;
+}
+
+body.light-theme .badge {
+  color: #0f172a;
+  background: #e2e8f0;
+  border-color: #94a3b8;
+}
+
+body.light-theme .btn {
+  background: #e2e8f0;
+  color: #0f172a;
+  border-color: #94a3b8;
+}
+
+body.light-theme .btn.danger {
+  background: #fee2e2;
+  color: #7f1d1d;
+  border-color: #ef4444;
+}
+
+body.light-theme .toolbar-btn {
+  color: #0f172a;
+}
+
+body.light-theme .github-btn {
+  color: #0369a1 !important;
+}
+
+body.light-theme .donate-btn {
+  color: #b91c1c !important;
+}
+
+body.light-theme .theme-btn {
+  background: linear-gradient(180deg, #2563eb, #1d4ed8);
+  color: #ffffff;
+}
+
+body.light-theme #adminAccessStatus,
+body.light-theme #actionsStatus.disabled,
+body.light-theme #approvedClientCount,
+body.light-theme #runningTotal,
+body.light-theme #errorsTotal {
+  color: #16a34a;
+}
+
+body.light-theme #remoteCount,
+body.light-theme #instancesTotal,
+body.light-theme #containersTotal {
+  color: #0284c7;
+}
+
+body.light-theme #pendingClientCount,
+body.light-theme #stoppedTotal {
+  color: #d97706;
+}
+
+body.light-theme #vmsTotal {
+  color: #9333ea;
+}
+
