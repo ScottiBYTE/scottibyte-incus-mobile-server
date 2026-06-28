@@ -1395,3 +1395,50 @@ body.light-theme .remote-add-grid label span {
   border-color: rgba(220, 38, 38, 0.85);
   background: rgba(220, 38, 38, 0.10);
 }
+
+.operation-dry-run-panel summary {
+  cursor: pointer;
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  list-style-position: inside;
+}
+
+.operation-dry-run-panel:not([open]) {
+  padding: 0.65rem 0.75rem;
+}
+
+.operation-dry-run-panel:not([open]) .operation-dry-run-header,
+.operation-dry-run-panel:not([open]) .operation-dry-run-grid,
+.operation-dry-run-panel:not([open]) .dry-run-result {
+  display: none;
+}
+
+.operation-dry-run-panel[open] summary {
+  margin-bottom: 0.65rem;
+}
+
+.operation-dry-run-panel summary {
+  position: relative;
+  padding-left: 1.35rem;
+}
+
+.operation-dry-run-panel summary::before {
+  content: "▶";
+  position: absolute;
+  left: 0;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.operation-dry-run-panel[open] summary::before {
+  content: "▼";
+}
+
+.operation-dry-run-panel summary strong {
+  color: var(--text);
+}
+
+.operation-dry-run-panel:not([open]) summary {
+  min-height: 1.5rem;
+}
