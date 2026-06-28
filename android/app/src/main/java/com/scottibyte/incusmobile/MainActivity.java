@@ -12,6 +12,7 @@ import android.text.TextWatcher;
 import android.view.Gravity;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -35,7 +36,7 @@ import java.util.Map;
 
 public class MainActivity extends Activity {
     private static final String API_BASE_URL = "https://incusmobile.scottibyte.com";
-    private static final String APP_VERSION = "0.3.10";
+    private static final String APP_VERSION = "0.3.11";
     private static final String PREFS_NAME = "scottibyte_incus_mobile";
     private static final String PREF_DEVICE_ID = "device_id";
     private static final String PREF_BEARER_TOKEN = "bearer_token";
@@ -96,24 +97,48 @@ public class MainActivity extends Activity {
 
         fixedHeaderLayout = new LinearLayout(this);
         fixedHeaderLayout.setOrientation(LinearLayout.VERTICAL);
-        fixedHeaderLayout.setPadding(36, 22, 36, 18);
-        fixedHeaderLayout.setBackgroundColor(0xFF050716);
+        fixedHeaderLayout.setPadding(36, 24, 36, 20);
+        fixedHeaderLayout.setBackground(makeRoundedBackground(0xFF050716, 0xFF0F172A, 1, 0));
+
+        LinearLayout brandRow = new LinearLayout(this);
+        brandRow.setOrientation(LinearLayout.HORIZONTAL);
+        brandRow.setGravity(Gravity.CENTER_VERTICAL);
+        brandRow.setPadding(0, 0, 0, 16);
+
+        ImageView brandLogoView = new ImageView(this);
+        brandLogoView.setImageResource(R.drawable.app_icon);
+        LinearLayout.LayoutParams logoParams = new LinearLayout.LayoutParams(72, 72);
+        logoParams.setMargins(0, 0, 18, 0);
+        brandLogoView.setLayoutParams(logoParams);
+
+        LinearLayout brandTextColumn = new LinearLayout(this);
+        brandTextColumn.setOrientation(LinearLayout.VERTICAL);
+        brandTextColumn.setLayoutParams(new LinearLayout.LayoutParams(
+            0,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            1
+        ));
 
         brandTitleView = new TextView(this);
         brandTitleView.setText("ScottiBYTE Incus Mobile");
         brandTitleView.setTextSize(22);
         brandTitleView.setTypeface(Typeface.DEFAULT_BOLD);
         brandTitleView.setTextColor(0xFFFFFFFF);
-        brandTitleView.setGravity(Gravity.CENTER_HORIZONTAL);
 
         headerStatsView = new TextView(this);
         headerStatsView.setText("Loading servers...");
         headerStatsView.setTextSize(14);
         headerStatsView.setTextColor(0xFFD1D5DB);
-        headerStatsView.setGravity(Gravity.CENTER_HORIZONTAL);
+
+        brandTextColumn.addView(brandTitleView);
+        brandTextColumn.addView(headerStatsView);
+
+        brandRow.addView(brandLogoView);
+        brandRow.addView(brandTextColumn);
 
         headerDetailsButton = new Button(this);
         headerDetailsButton.setText("Connection details ▸");
+        styleBubbleButton(headerDetailsButton);
         headerDetailsButton.setOnClickListener(v -> {
             headerDetailsVisible = !headerDetailsVisible;
             updateHeaderDetailsView();
@@ -123,10 +148,10 @@ public class MainActivity extends Activity {
         headerDetailsView.setTextSize(13);
         headerDetailsView.setTextColor(0xFFD1D5DB);
         headerDetailsView.setGravity(Gravity.CENTER_HORIZONTAL);
+        headerDetailsView.setPadding(12, 14, 12, 0);
         headerDetailsView.setVisibility(View.GONE);
 
-        fixedHeaderLayout.addView(brandTitleView);
-        fixedHeaderLayout.addView(headerStatsView);
+        fixedHeaderLayout.addView(brandRow);
         fixedHeaderLayout.addView(headerDetailsButton);
         fixedHeaderLayout.addView(headerDetailsView);
 
@@ -185,10 +210,12 @@ public class MainActivity extends Activity {
 
         backToServersButton = new Button(this);
         backToServersButton.setText("Back to Servers");
+        styleBubbleButton(backToServersButton);
         backToServersButton.setOnClickListener(v -> showServerListView());
 
         backToInstancesButton = new Button(this);
         backToInstancesButton.setText("Back to Instances");
+        styleBubbleButton(backToInstancesButton);
         backToInstancesButton.setOnClickListener(v -> {
             selectedInstanceKey = "";
             showServerDrilldownView();
@@ -954,6 +981,26 @@ public class MainActivity extends Activity {
         });
     }
 
+    private GradientDrawable makeRoundedBackground(int fillColor, int strokeColor, int strokeWidth, int radius) {
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(fillColor);
+        bg.setCornerRadius(radius);
+        bg.setStroke(strokeWidth, strokeColor);
+        return bg;
+    }
+
+    private void styleBubbleButton(Button button) {
+        if (button == null) {
+            return;
+        }
+
+        button.setAllCaps(false);
+        button.setTextColor(0xFFE5E7EB);
+        button.setTextSize(14);
+        button.setPadding(28, 14, 28, 14);
+        button.setBackground(makeRoundedBackground(0xFF10233F, 0xFF3B82F6, 2, 999));
+    }
+
     private void updateHeaderDetailsView() {
         if (headerDetailsButton == null || headerDetailsView == null) {
             return;
@@ -966,14 +1013,19 @@ public class MainActivity extends Activity {
         }
 
         headerDetailsButton.setText("Connection details ▾");
+
+        String deviceName = getDeviceName();
+        if (deviceName == null || deviceName.trim().isEmpty()) {
+            deviceName = "Unnamed device";
+        }
+
         headerDetailsView.setText(
             "Connected to:\n" + API_BASE_URL +
-            "\n\nClient:\n" + getDeviceName() +
+            "\n\nClient:\n" + deviceName +
             "\n\nVersion:\n" + APP_VERSION
         );
         headerDetailsView.setVisibility(View.VISIBLE);
     }
-
     private void renderHeaderStats() {
         if (headerStatsView == null) {
             return;
@@ -1133,7 +1185,7 @@ public class MainActivity extends Activity {
 
             LinearLayout card = new LinearLayout(this);
             card.setOrientation(LinearLayout.VERTICAL);
-            card.setPadding(28, 22, 28, 22);
+            card.setPadding(30, 24, 30, 24);
 
             LinearLayout.LayoutParams cardParams = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
@@ -1162,12 +1214,15 @@ public class MainActivity extends Activity {
             title.setTextColor(0xFFFFFFFF);
 
             TextView countsView = new TextView(this);
-            countsView.setText(
-                row[0] + " instances\n" +
+            String serverStats = row[0] + (row[0] == 1 ? " instance\n" : " instances\n") +
                 row[1] + " running / " +
-                row[2] + " stopped / " +
-                row[3] + " inventory errors"
-            );
+                row[2] + " stopped";
+
+            if (row[3] > 0) {
+                serverStats += "\n" + row[3] + (row[3] == 1 ? " remote query issue" : " remote query issues");
+            }
+
+            countsView.setText(serverStats);
             countsView.setTextSize(14);
             countsView.setTextColor(0xFFD1D5DB);
 
@@ -1187,8 +1242,15 @@ public class MainActivity extends Activity {
                 renderInstancesList();
             });
 
+            TextView chevron = new TextView(this);
+            chevron.setText("›");
+            chevron.setTextSize(28);
+            chevron.setTextColor(0xFF93C5FD);
+            chevron.setGravity(Gravity.END);
+
             card.addView(title);
             card.addView(countsView);
+            card.addView(chevron);
 
             serverCardsContainer.addView(card);
         }
