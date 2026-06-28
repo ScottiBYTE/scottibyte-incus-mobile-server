@@ -530,6 +530,31 @@ async function executeOperationRequest(req, request) {
     };
   }
 
+  const mobileActionsEnabled = String(process.env.MOBILE_ACTIONS_ENABLED || 'false').toLowerCase() === 'true';
+
+  if (!mobileActionsEnabled) {
+    logAuditEvent({
+      actor_type: actor.actor_type,
+      actor_id: actor.actor_id,
+      actor_name: actor.actor_name,
+      event_type: 'operation.blocked',
+      target_type: targetType,
+      target_id: targetId,
+      result: 'blocked',
+      message: `Mobile operations are globally disabled: ${operationKey}`,
+      metadata: {
+        operation: operationKey,
+        role: actor.role
+      }
+    });
+
+    return {
+      ok: false,
+      status: 403,
+      error: 'Mobile operations disabled'
+    };
+  }
+
   if (!operation.enabled) {
     logAuditEvent({
       actor_type: actor.actor_type,
