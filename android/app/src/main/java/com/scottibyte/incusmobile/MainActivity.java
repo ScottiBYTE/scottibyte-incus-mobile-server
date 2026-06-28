@@ -14,6 +14,7 @@ import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import android.view.View;
 
 import org.json.JSONObject;
 import org.json.JSONArray;
@@ -29,7 +30,7 @@ import java.util.UUID;
 
 public class MainActivity extends Activity {
     private static final String API_BASE_URL = "https://incusmobile.scottibyte.com";
-    private static final String APP_VERSION = "0.1.7";
+    private static final String APP_VERSION = "0.1.8";
     private static final String PREFS_NAME = "scottibyte_incus_mobile";
     private static final String PREF_DEVICE_ID = "device_id";
     private static final String PREF_BEARER_TOKEN = "bearer_token";
@@ -39,6 +40,12 @@ public class MainActivity extends Activity {
     private TextView statusView;
     private TextView deviceIdView;
     private TextView tokenView;
+    private Button healthButton;
+    private Button requestPairingButton;
+    private Button checkApprovalButton;
+    private Button summaryButton;
+    private Button instancesButton;
+    private Button resetButton;
     private TextView dashboardView;
     private TextView instancesView;
     private TextView instanceDetailView;
@@ -81,27 +88,27 @@ public class MainActivity extends Activity {
         deviceNameInput.setSingleLine(true);
         deviceNameInput.setText(getDeviceName());
 
-        Button healthButton = new Button(this);
-        healthButton.setText("Test Server Health");
+        healthButton = new Button(this);
+        healthButton.setText("Server Health");
         healthButton.setOnClickListener(v -> testHealth());
 
-        Button requestPairingButton = new Button(this);
+        requestPairingButton = new Button(this);
         requestPairingButton.setText("Request Pairing");
         requestPairingButton.setOnClickListener(v -> requestPairing());
 
-        Button checkApprovalButton = new Button(this);
-        checkApprovalButton.setText("Check Approval Now");
+        checkApprovalButton = new Button(this);
+        checkApprovalButton.setText("Check Pairing Status");
         checkApprovalButton.setOnClickListener(v -> checkPairingStatus());
 
-        Button summaryButton = new Button(this);
+        summaryButton = new Button(this);
         summaryButton.setText("Refresh");
         summaryButton.setOnClickListener(v -> loadAuthorizedHome());
 
-        Button instancesButton = new Button(this);
+        instancesButton = new Button(this);
         instancesButton.setText("View Instances");
         instancesButton.setOnClickListener(v -> loadInstances());
 
-        Button resetButton = new Button(this);
+        resetButton = new Button(this);
         resetButton.setText("Reset Pairing");
         resetButton.setOnClickListener(v -> resetLocalToken());
 
@@ -111,7 +118,7 @@ public class MainActivity extends Activity {
         dashboardView = new TextView(this);
         dashboardView.setTextSize(18);
         dashboardView.setTypeface(Typeface.DEFAULT_BOLD);
-        dashboardView.setText("\nNot paired yet.");
+        dashboardView.setText("\nHome\nNot paired yet.");
 
         instancesView = new TextView(this);
         instancesView.setTextSize(14);
@@ -139,7 +146,6 @@ public class MainActivity extends Activity {
 
         instanceDetailView = new TextView(this);
         instanceDetailView.setTextSize(14);
-        instanceDetailView.setTypeface(Typeface.DEFAULT_BOLD);
         instanceDetailView.setText("\nSelected Instance\nNo instance selected.");
 
         statusView = new TextView(this);
@@ -167,9 +173,38 @@ public class MainActivity extends Activity {
         setContentView(scroll);
 
         refreshTokenStatus();
+        updateAuthUiVisibility();
 
         if (hasBearerToken()) {
             loadAuthorizedHome();
+        }
+    }
+
+    private void updateAuthUiVisibility() {
+        boolean authorized = hasBearerToken();
+
+        if (requestPairingButton != null) {
+            requestPairingButton.setVisibility(authorized ? View.GONE : View.VISIBLE);
+        }
+
+        if (checkApprovalButton != null) {
+            checkApprovalButton.setVisibility(authorized ? View.GONE : View.VISIBLE);
+        }
+
+        if (summaryButton != null) {
+            summaryButton.setVisibility(authorized ? View.VISIBLE : View.GONE);
+        }
+
+        if (instancesButton != null) {
+            instancesButton.setVisibility(authorized ? View.VISIBLE : View.GONE);
+        }
+
+        if (resetButton != null) {
+            resetButton.setVisibility(View.VISIBLE);
+        }
+
+        if (healthButton != null) {
+            healthButton.setVisibility(View.VISIBLE);
         }
     }
 
@@ -215,6 +250,7 @@ public class MainActivity extends Activity {
             .apply();
 
         refreshTokenStatus();
+        updateAuthUiVisibility();
         loadAuthorizedHome();
     }
 
@@ -232,12 +268,12 @@ public class MainActivity extends Activity {
         stopPairingPolling();
         prefs.edit().remove(PREF_BEARER_TOKEN).apply();
         refreshTokenStatus();
-        dashboardView.setText("\nNot paired yet.");
+        dashboardView.setText("\nHome\nNot paired yet.");
         lastInstances = null;
         instanceFilterInput.setText("");
         instancesView.setText("\nInstances: not loaded");
         instanceDetailView.setText("\nSelected Instance\nNo instance selected.");
-        setStatus("Local token removed. Server approval was not changed.");
+        setStatus("Local token removed. Server approval was not changed. Request pairing again if needed.");
     }
 
     private void setStatus(String message) {
