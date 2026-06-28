@@ -520,6 +520,7 @@ async function loadData() {
     renderRemoteFilter();
     renderClients();
     renderInstances();
+    await loadAudit();
   } catch (err) {
     console.error(err);
     alert(err.message);
@@ -632,6 +633,38 @@ function initTheme() {
 
 
 
+
+async function refreshAuditWithFeedback() {
+  const btn = $('refreshAuditBtn');
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Refreshing...';
+  }
+
+  try {
+    await loadAudit();
+
+    if (btn) {
+      btn.textContent = 'Updated';
+      setTimeout(() => {
+        btn.textContent = 'Refresh Activity';
+        btn.disabled = false;
+      }, 1200);
+    }
+  } catch (err) {
+    if (btn) {
+      btn.textContent = 'Refresh Failed';
+      setTimeout(() => {
+        btn.textContent = 'Refresh Activity';
+        btn.disabled = false;
+      }, 1800);
+    }
+
+    alert(err.message || 'Audit refresh failed');
+  }
+}
+
 async function refreshRemotesOnly() {
   const btn = $('refreshRemotesBtn');
 
@@ -682,7 +715,7 @@ function init() {
   $('themeToggleBtn').addEventListener('click', toggleTheme);
   $('logoutBtn').addEventListener('click', logoutAdmin);
   $('refreshRemotesBtn').addEventListener('click', refreshRemotesOnly);
-  $('refreshAuditBtn').addEventListener('click', loadAudit);
+  $('refreshAuditBtn').addEventListener('click', refreshAuditWithFeedback);
 
   ['searchInput', 'remoteFilter', 'statusFilter', 'typeFilter'].forEach((id) => {
     $(id).addEventListener('input', renderInstances);

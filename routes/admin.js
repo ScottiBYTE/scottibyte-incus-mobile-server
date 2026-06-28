@@ -104,6 +104,20 @@ router.post('/clients/:id/approve', (req, res) => {
     WHERE id = ?
   `).run(role, tokenHash, token, nowIso(), id);
 
+  logAuditEvent({
+    ...getAdminActor(req),
+    event_type: 'client.approve',
+    target_type: 'mobile_client',
+    target_id: String(id),
+    result: 'success',
+    message: `Approved mobile client ${client.device_name || client.device_id} as ${role}`,
+    metadata: {
+      device_id: client.device_id,
+      device_name: client.device_name,
+      role
+    }
+  });
+
   res.json({
     ok: true,
     id,
@@ -127,18 +141,39 @@ router.post('/clients/:id/rename', (req, res) => {
     });
   }
 
-  const result = db.prepare(`
-    UPDATE mobile_clients
-    SET display_name = ?
+  const client = db.prepare(`
+    SELECT id, device_id, device_name, display_name
+    FROM mobile_clients
     WHERE id = ?
-  `).run(displayName || null, id);
+  `).get(id);
 
-  if (result.changes === 0) {
+  if (!client) {
     return res.status(404).json({
       ok: false,
       error: 'Client not found'
     });
   }
+
+  db.prepare(`
+    UPDATE mobile_clients
+    SET display_name = ?
+    WHERE id = ?
+  `).run(displayName || null, id);
+
+  logAuditEvent({
+    ...getAdminActor(req),
+    event_type: 'client.rename',
+    target_type: 'mobile_client',
+    target_id: String(id),
+    result: 'success',
+    message: `Renamed mobile client ${client.device_name || client.device_id}`,
+    metadata: {
+      device_id: client.device_id,
+      device_name: client.device_name,
+      old_display_name: client.display_name,
+      new_display_name: displayName || null
+    }
+  });
 
   res.json({
     ok: true,
@@ -151,7 +186,20 @@ router.post('/clients/:id/rename', (req, res) => {
 router.post('/clients/:id/revoke', (req, res) => {
   const id = Number(req.params.id);
 
-  const result = db.prepare(`
+  const client = db.prepare(`
+    SELECT id, device_id, device_name, display_name, status, role
+    FROM mobile_clients
+    WHERE id = ?
+  `).get(id);
+
+  if (!client) {
+    return res.status(404).json({
+      ok: false,
+      error: 'Client not found'
+    });
+  }
+
+  db.prepare(`
     UPDATE mobile_clients
     SET status = 'revoked',
         token_hash = NULL,
@@ -160,12 +208,21 @@ router.post('/clients/:id/revoke', (req, res) => {
     WHERE id = ?
   `).run(nowIso(), id);
 
-  if (result.changes === 0) {
-    return res.status(404).json({
-      ok: false,
-      error: 'Client not found'
-    });
-  }
+  logAuditEvent({
+    ...getAdminActor(req),
+    event_type: 'client.revoke',
+    target_type: 'mobile_client',
+    target_id: String(id),
+    result: 'success',
+    message: `Revoked mobile client ${client.display_name || client.device_name || client.device_id}`,
+    metadata: {
+      device_id: client.device_id,
+      device_name: client.device_name,
+      display_name: client.display_name,
+      previous_status: client.status,
+      role: client.role
+    }
+  });
 
   res.json({
     ok: true,
@@ -185,18 +242,40 @@ router.post('/clients/:id/role', (req, res) => {
     });
   }
 
-  const result = db.prepare(`
-    UPDATE mobile_clients
-    SET role = ?
+  const client = db.prepare(`
+    SELECT id, device_id, device_name, display_name, role
+    FROM mobile_clients
     WHERE id = ?
-  `).run(requestedRole, id);
+  `).get(id);
 
-  if (result.changes === 0) {
+  if (!client) {
     return res.status(404).json({
       ok: false,
       error: 'Client not found'
     });
   }
+
+  db.prepare(`
+    UPDATE mobile_clients
+    SET role = ?
+    WHERE id = ?
+  `).run(requestedRole, id);
+
+  logAuditEvent({
+    ...getAdminActor(req),
+    event_type: 'client.role_change',
+    target_type: 'mobile_client',
+    target_id: String(id),
+    result: 'success',
+    message: `Changed mobile client role to ${requestedRole}`,
+    metadata: {
+      device_id: client.device_id,
+      device_name: client.device_name,
+      display_name: client.display_name,
+      old_role: client.role,
+      new_role: requestedRole
+    }
+  });
 
   res.json({
     ok: true,
