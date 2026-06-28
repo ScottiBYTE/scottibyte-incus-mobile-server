@@ -35,7 +35,7 @@ import java.util.Map;
 
 public class MainActivity extends Activity {
     private static final String API_BASE_URL = "https://incusmobile.scottibyte.com";
-    private static final String APP_VERSION = "0.3.2";
+    private static final String APP_VERSION = "0.3.3";
     private static final String PREFS_NAME = "scottibyte_incus_mobile";
     private static final String PREF_DEVICE_ID = "device_id";
     private static final String PREF_BEARER_TOKEN = "bearer_token";
@@ -61,6 +61,7 @@ public class MainActivity extends Activity {
     private EditText serverFilterInput;
     private EditText instanceFilterInput;
     private JSONArray lastInstances = null;
+    private String selectedInstanceKey = "";
     private EditText deviceNameInput;
     private final Handler pairingHandler = new Handler(Looper.getMainLooper());
     private boolean pairingPollingActive = false;
@@ -163,6 +164,7 @@ public class MainActivity extends Activity {
             @Override
             public void afterTextChanged(Editable value) {
                 if (instancesView != null && instanceDetailView != null && lastInstances != null) {
+                    selectedInstanceKey = "";
                     renderRemoteSummary();
                     renderInstancesList();
                 }
@@ -184,6 +186,7 @@ public class MainActivity extends Activity {
             @Override
             public void afterTextChanged(Editable value) {
                 if (instancesView != null && instanceDetailView != null && lastInstances != null) {
+                    selectedInstanceKey = "";
                     renderInstancesList();
                 }
             }
@@ -996,6 +999,10 @@ public class MainActivity extends Activity {
                     }
                 }
 
+                if (firstMatch != null && selectedInstanceKey.isEmpty()) {
+                    selectedInstanceKey = getInstanceKey(firstMatch);
+                }
+
                 instancesView.setText(out.toString());
                 renderInstanceCards(matchedInstances);
                 setInstanceDetail(firstMatch);
@@ -1004,6 +1011,18 @@ public class MainActivity extends Activity {
                 setStatus(errorText(e));
             }
         });
+    }
+
+    private String getInstanceKey(JSONObject item) {
+        if (item == null) {
+            return "";
+        }
+
+        String remote = item.optString("remote", "");
+        String project = item.optString("project", "");
+        String name = item.optString("name", item.optString("instance", item.optString("id", "")));
+
+        return remote + ":" + project + ":" + name;
     }
 
     private void renderInstanceCards(ArrayList<JSONObject> instances) {
@@ -1031,6 +1050,8 @@ public class MainActivity extends Activity {
             String type = item.optString("type", "");
             String status = item.optString("status", "");
             String error = item.optString("error", "");
+            String instanceKey = getInstanceKey(item);
+            boolean selected = !selectedInstanceKey.isEmpty() && selectedInstanceKey.equals(instanceKey);
 
             LinearLayout card = new LinearLayout(this);
             card.setOrientation(LinearLayout.VERTICAL);
@@ -1050,7 +1071,10 @@ public class MainActivity extends Activity {
             GradientDrawable background = new GradientDrawable();
             background.setCornerRadius(22);
 
-            if (hasError) {
+            if (selected) {
+                background.setStroke(4, 0xFF60A5FA);
+                background.setColor(0xFF1E3A5F);
+            } else if (hasError) {
                 background.setStroke(3, 0xFFF87171);
                 background.setColor(0xFF3B1111);
             } else if (running) {
@@ -1090,6 +1114,14 @@ public class MainActivity extends Activity {
 
             meta.setTextSize(14);
             meta.setTextColor(0xFFD1D5DB);
+
+            card.setClickable(true);
+            card.setFocusable(true);
+            card.setOnClickListener(v -> {
+                selectedInstanceKey = getInstanceKey(item);
+                setInstanceDetail(item);
+                renderInstanceCards(instances);
+            });
 
             card.addView(title);
             card.addView(meta);
