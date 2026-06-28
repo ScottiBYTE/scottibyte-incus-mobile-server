@@ -3,6 +3,11 @@ const crypto = require('crypto');
 const { db } = require('../db');
 const { getRemoteInventory, addRemoteViaSsh, removeRemote, testRemote } = require('../incus');
 const { logAuditEvent, listAuditEvents, getAdminActor } = require('../audit');
+const {
+  listAllOperationDefinitions,
+  setOperationEnabled,
+  setOperationRole
+} = require('../operations');
 
 const router = express.Router();
 
@@ -411,6 +416,116 @@ router.delete('/remotes/:name', async (req, res) => {
       result
     });
   } catch (err) {
+    res.status(400).json({
+      ok: false,
+      error: err.message
+    });
+  }
+});
+
+
+
+router.get('/operations', (req, res) => {
+  try {
+    res.json({
+      ok: true,
+      operations: listAllOperationDefinitions()
+    });
+  } catch (err) {
+    res.status(500).json({
+      ok: false,
+      error: err.message
+    });
+  }
+});
+
+router.post('/operations/:operationKey/enabled', (req, res) => {
+  const operationKey = req.params.operationKey;
+  const enabled = Boolean(req.body?.enabled);
+
+  try {
+    const before = listAllOperationDefinitions().find((op) => op.operation_key === operationKey);
+    const op = setOperationEnabled(operationKey, enabled);
+
+    logAuditEvent({
+      ...getAdminActor(req),
+      event_type: 'operation_definition.enabled',
+      target_type: 'operation_definition',
+      target_id: operationKey,
+      result: 'success',
+      message: `${enabled ? 'Enabled' : 'Disabled'} operation ${operationKey}`,
+      metadata: {
+        operation: operationKey,
+        previous_enabled: before?.enabled,
+        enabled
+      }
+    });
+
+    res.json({
+      ok: true,
+      operation: op
+    });
+  } catch (err) {
+    logAuditEvent({
+      ...getAdminActor(req),
+      event_type: 'operation_definition.enabled',
+      target_type: 'operation_definition',
+      target_id: operationKey,
+      result: 'failed',
+      message: err.message,
+      metadata: {
+        operation: operationKey,
+        enabled
+      }
+    });
+
+    res.status(400).json({
+      ok: false,
+      error: err.message
+    });
+  }
+});
+
+router.post('/operations/:operationKey/role', (req, res) => {
+  const operationKey = req.params.operationKey;
+  const roleRequired = String(req.body?.role_required || '').trim();
+
+  try {
+    const before = listAllOperationDefinitions().find((op) => op.operation_key === operationKey);
+    const op = setOperationRole(operationKey, roleRequired);
+
+    logAuditEvent({
+      ...getAdminActor(req),
+      event_type: 'operation_definition.role',
+      target_type: 'operation_definition',
+      target_id: operationKey,
+      result: 'success',
+      message: `Changed ${operationKey} required role to ${roleRequired}`,
+      metadata: {
+        operation: operationKey,
+        previous_role_required: before?.role_required,
+        role_required: roleRequired
+      }
+    });
+
+    res.json({
+      ok: true,
+      operation: op
+    });
+  } catch (err) {
+    logAuditEvent({
+      ...getAdminActor(req),
+      event_type: 'operation_definition.role',
+      target_type: 'operation_definition',
+      target_id: operationKey,
+      result: 'failed',
+      message: err.message,
+      metadata: {
+        operation: operationKey,
+        role_required: roleRequired
+      }
+    });
+
     res.status(400).json({
       ok: false,
       error: err.message

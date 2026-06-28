@@ -553,9 +553,80 @@ async function executeOperationRequest(req, request) {
   }
 }
 
+
+function listAllOperationDefinitions() {
+  ensureOperationTables();
+
+  return db.prepare(`
+    SELECT *
+    FROM operation_definitions
+    ORDER BY operation_key
+  `).all().map(parseOperationRow).map((op) => ({
+    id: op.id,
+    operation_key: op.operation_key,
+    label: op.label,
+    description: op.description,
+    enabled: op.enabled,
+    role_required: op.role_required,
+    target_type: op.target_type,
+    runner_type: op.runner_type,
+    argv_template: op.argv_template,
+    allowed_params: op.allowed_params,
+    required_params: op.required_params,
+    protected_target_policy: op.protected_target_policy,
+    created_at: op.created_at,
+    updated_at: op.updated_at
+  }));
+}
+
+function setOperationEnabled(operationKey, enabled) {
+  ensureOperationTables();
+
+  const op = getOperationDefinition(operationKey);
+
+  if (!op) {
+    throw new Error('Operation not found');
+  }
+
+  db.prepare(`
+    UPDATE operation_definitions
+    SET enabled = ?, updated_at = ?
+    WHERE operation_key = ?
+  `).run(enabled ? 1 : 0, nowIso(), operationKey);
+
+  return getOperationDefinition(operationKey);
+}
+
+function setOperationRole(operationKey, roleRequired) {
+  ensureOperationTables();
+
+  const role = String(roleRequired || '').trim();
+
+  if (!Object.prototype.hasOwnProperty.call(ROLE_RANK, role)) {
+    throw new Error('Invalid role');
+  }
+
+  const op = getOperationDefinition(operationKey);
+
+  if (!op) {
+    throw new Error('Operation not found');
+  }
+
+  db.prepare(`
+    UPDATE operation_definitions
+    SET role_required = ?, updated_at = ?
+    WHERE operation_key = ?
+  `).run(role, nowIso(), operationKey);
+
+  return getOperationDefinition(operationKey);
+}
+
 module.exports = {
   ensureOperationTables,
   seedDefaultOperations,
   listOperationDefinitionsForRole,
+  listAllOperationDefinitions,
+  setOperationEnabled,
+  setOperationRole,
   executeOperationRequest
 };
