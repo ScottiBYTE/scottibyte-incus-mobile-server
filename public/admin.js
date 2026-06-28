@@ -4,6 +4,7 @@ let state = {
   remotes: [],
   instances: [],
   clients: [],
+  operations: [],
   ignoredRemotes: [],
   remoteTests: {},
   instanceSort: { key: 'remote', dir: 'asc' },
@@ -311,6 +312,97 @@ async function loadAudit() {
   renderAudit(data.events || []);
 }
 
+
+function renderOperations() {
+  const body = $('operationsBody');
+
+  if (!body) return;
+
+  if (!state.operations || state.operations.length === 0) {
+    body.innerHTML = `
+      <tr>
+        <td colspan="8" class="muted">No operation definitions found.</td>
+      </tr>
+    `;
+    return;
+  }
+
+  body.innerHTML = state.operations.map((op) => {
+    const enabledText = op.enabled ? 'Enabled' : 'Disabled';
+    const enabledType = op.enabled ? 'good' : 'bad';
+    const nextEnabled = op.enabled ? 'false' : 'true';
+    const nextLabel = op.enabled ? 'Disable' : 'Enable';
+    const template = Array.isArray(op.argv_template)
+      ? op.argv_template.join(' ')
+      : '-';
+
+    return `
+      <tr>
+        <td>${bubble(op.operation_key, 'remote')}</td>
+        <td>
+          <strong>${escapeHtml(op.label || op.operation_key)}</strong><br>
+          <span class="note">${escapeHtml(op.description || '')}</span>
+        </td>
+        <td>${bubble(enabledText, enabledType)}</td>
+        <td>
+          <select onchange="changeOperationRole('${escapeHtml(op.operation_key)}', this.value)">
+            <option value="viewer" ${op.role_required === 'viewer' ? 'selected' : ''}>viewer</option>
+            <option value="operator" ${op.role_required === 'operator' ? 'selected' : ''}>operator</option>
+            <option value="admin" ${op.role_required === 'admin' ? 'selected' : ''}>admin</option>
+          </select>
+        </td>
+        <td>${bubble(op.target_type || '-', 'neutral')}</td>
+        <td>${bubble(op.runner_type || '-', 'neutral')}</td>
+        <td><code>${escapeHtml(template)}</code></td>
+        <td>
+          <div class="actions">
+            <button class="btn ${op.enabled ? 'danger' : 'primary'}" onclick="setOperationEnabled('${escapeHtml(op.operation_key)}', ${nextEnabled})">${nextLabel}</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  reapplyTableSelection('operationsTable');
+}
+
+async function loadOperations() {
+  const data = await fetchJson('/api/admin/operations');
+  state.operations = data.operations || [];
+  renderOperations();
+}
+
+async function setOperationEnabled(operationKey, enabled) {
+  try {
+    await fetchJson(`/api/admin/operations/${encodeURIComponent(operationKey)}/enabled`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled })
+    });
+
+    await loadOperations();
+    await loadAudit();
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
+async function changeOperationRole(operationKey, roleRequired) {
+  try {
+    await fetchJson(`/api/admin/operations/${encodeURIComponent(operationKey)}/role`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role_required: roleRequired })
+    });
+
+    await loadOperations();
+    await loadAudit();
+  } catch (err) {
+    alert(err.message);
+    await loadOperations();
+  }
+}
+
 function renderClients() {
   const rows = sortRows(state.clients, state.clientSort);
 
@@ -507,12 +599,13 @@ async function revokeClient(id) {
 
 async function loadData() {
   try {
-    const [health, summaryData, remotesData, instancesData, clientsData] = await Promise.all([
+    const [health, summaryData, remotesData, instancesData, clientsData, operationsData] = await Promise.all([
       fetchJson('/api/mobile/health'),
       fetchJson('/api/mobile/summary'),
       fetchJson('/api/admin/remotes'),
       fetchJson('/api/mobile/instances'),
-      fetchJson('/api/admin/clients')
+      fetchJson('/api/admin/clients'),
+      fetchJson('/api/admin/operations')
     ]);
 
     state.health = health;
@@ -521,12 +614,14 @@ async function loadData() {
     state.ignoredRemotes = remotesData.ignored || [];
     state.instances = instancesData.instances || [];
     state.clients = clientsData.clients || [];
+    state.operations = operationsData.operations || [];
 
     renderStatus();
     renderSummary();
     renderRemotes();
     renderRemoteFilter();
     renderClients();
+    renderOperations();
     renderInstances();
     await loadAudit();
   } catch (err) {

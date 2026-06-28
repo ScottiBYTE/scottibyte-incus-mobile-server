@@ -38,6 +38,26 @@
       </div>
     </section>
 
+<section class="panel">
+      <div class="panel-heading">
+        <div>
+          <h2>Instance Summary</h2>
+          <p>At-a-glance inventory across configured Incus remotes.</p>
+        </div>
+      </div>
+
+      <div id="summaryCards" class="cards">
+        <div class="card"><span>Total Instances</span><strong id="instancesTotal">-</strong></div>
+        <div class="card"><span>Running</span><strong id="runningTotal">-</strong></div>
+        <div class="card"><span>Stopped</span><strong id="stoppedTotal">-</strong></div>
+        <div class="card"><span>Containers</span><strong id="containersTotal">-</strong></div>
+        <div class="card"><span>Virtual Machines</span><strong id="vmsTotal">-</strong></div>
+        <div class="card"><span>Errors</span><strong id="errorsTotal">-</strong></div>
+      </div>
+    </section>
+
+
+
     <section class="admin-stack">
       <section class="panel">
         <div class="panel-heading">
@@ -149,7 +169,39 @@
         </div>
     </section>
 
-    <section class="panel">
+    <section class="card">
+      <div class="section-title">
+        <div>
+          <h2>Operation Definitions</h2>
+          <p class="note">Data-driven mobile API operations. Enable only operations you want mobile clients to discover and request.</p>
+        </div>
+        <button id="refreshOperationsBtn" class="btn" onclick="loadOperations()">Refresh Operations</button>
+      </div>
+
+      <div class="table-wrap selectable-table" data-table="operationsTable" tabindex="0">
+        <table id="operationsTable">
+          <thead>
+            <tr>
+              <th>Operation</th>
+              <th>Label</th>
+              <th>Enabled</th>
+              <th>Role Required</th>
+              <th>Target Type</th>
+              <th>Runner</th>
+              <th>Template</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="operationsBody">
+            <tr>
+              <td colspan="8" class="muted">Loading operation definitions...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+<section class="panel">
       <div class="panel-heading">
         <div>
           <h2>Recent Activity</h2>
@@ -175,23 +227,8 @@
       </div>
     </section>
 
-    <section class="panel">
-      <div class="panel-heading">
-        <div>
-          <h2>Instance Summary</h2>
-          <p>At-a-glance inventory across configured Incus remotes.</p>
-        </div>
-      </div>
+    
 
-      <div id="summaryCards" class="cards">
-        <div class="card"><span>Total Instances</span><strong id="instancesTotal">-</strong></div>
-        <div class="card"><span>Running</span><strong id="runningTotal">-</strong></div>
-        <div class="card"><span>Stopped</span><strong id="stoppedTotal">-</strong></div>
-        <div class="card"><span>Containers</span><strong id="containersTotal">-</strong></div>
-        <div class="card"><span>Virtual Machines</span><strong id="vmsTotal">-</strong></div>
-        <div class="card"><span>Errors</span><strong id="errorsTotal">-</strong></div>
-      </div>
-    </section>
 
     <section class="panel inventory-panel">
       <div class="panel-heading">
@@ -238,6 +275,11 @@
         </table>
       </div>
     </section>
+  
+    
+
+
+
   </main>
 
   <script src="/public/admin.js"></script>
