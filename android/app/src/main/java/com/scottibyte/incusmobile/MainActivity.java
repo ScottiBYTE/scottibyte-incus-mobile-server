@@ -35,7 +35,7 @@ import java.util.Map;
 
 public class MainActivity extends Activity {
     private static final String API_BASE_URL = "https://incusmobile.scottibyte.com";
-    private static final String APP_VERSION = "0.3.0";
+    private static final String APP_VERSION = "0.3.1";
     private static final String PREFS_NAME = "scottibyte_incus_mobile";
     private static final String PREF_DEVICE_ID = "device_id";
     private static final String PREF_BEARER_TOKEN = "bearer_token";
@@ -159,6 +159,7 @@ public class MainActivity extends Activity {
             @Override
             public void afterTextChanged(Editable value) {
                 if (instancesView != null && instanceDetailView != null && lastInstances != null) {
+                    renderRemoteSummary();
                     renderInstancesList();
                 }
             }
@@ -715,10 +716,17 @@ public class MainActivity extends Activity {
             cardParams.setMargins(0, 10, 0, 10);
             card.setLayoutParams(cardParams);
 
+            String selectedServer = serverFilterInput != null
+                ? serverFilterInput.getText().toString().trim()
+                : "";
+
+            boolean selected = !selectedServer.isEmpty()
+                && remote.equalsIgnoreCase(selectedServer);
+
             GradientDrawable background = new GradientDrawable();
             background.setCornerRadius(24);
-            background.setStroke(2, 0xFF3A4A66);
-            background.setColor(0xFF111827);
+            background.setStroke(selected ? 4 : 2, selected ? 0xFF60A5FA : 0xFF3A4A66);
+            background.setColor(selected ? 0xFF1E3A5F : 0xFF111827);
             card.setBackground(background);
 
             TextView title = new TextView(this);
@@ -737,11 +745,67 @@ public class MainActivity extends Activity {
             countsView.setTextSize(14);
             countsView.setTextColor(0xFFD1D5DB);
 
+            card.setClickable(true);
+            card.setFocusable(true);
+            card.setOnClickListener(v -> {
+                if (serverFilterInput != null) {
+                    serverFilterInput.setText(remote);
+                    serverFilterInput.setSelection(serverFilterInput.getText().length());
+                }
+
+                renderInstancesList();
+            });
+
             card.addView(title);
             card.addView(countsView);
 
             serverCardsContainer.addView(card);
         }
+    }
+
+    private boolean remoteMatchesServerFilter(String remote, String serverFilter) {
+        if (serverFilter == null || serverFilter.trim().isEmpty()) {
+            return true;
+        }
+
+        String normalizedFilter = serverFilter.trim().toLowerCase();
+        String remoteLower = remote == null ? "" : remote.trim().toLowerCase();
+
+        if (remoteLower.isEmpty()) {
+            return false;
+        }
+
+        if (hasExactRemoteMatch(normalizedFilter)) {
+            return remoteLower.equals(normalizedFilter);
+        }
+
+        return remoteLower.contains(normalizedFilter);
+    }
+
+    private boolean hasExactRemoteMatch(String serverFilter) {
+        if (serverFilter == null || serverFilter.trim().isEmpty() || lastInstances == null) {
+            return false;
+        }
+
+        String normalized = serverFilter.trim().toLowerCase();
+
+        try {
+            for (int i = 0; i < lastInstances.length(); i++) {
+                JSONObject item = lastInstances.optJSONObject(i);
+                if (item == null) {
+                    continue;
+                }
+
+                String remote = item.optString("remote", "");
+                if (remote != null && remote.trim().toLowerCase().equals(normalized)) {
+                    return true;
+                }
+            }
+        } catch (Exception ignored) {
+            return false;
+        }
+
+        return false;
     }
 
     private void renderSelectedServerSummary(String serverFilter) {
@@ -761,7 +825,6 @@ public class MainActivity extends Activity {
             }
 
             String normalizedFilter = serverFilter.trim().toLowerCase();
-
             String selectedRemote = "";
             int total = 0;
             int running = 0;
@@ -779,7 +842,7 @@ public class MainActivity extends Activity {
                     remote = "unknown";
                 }
 
-                if (!remote.toLowerCase().contains(normalizedFilter)) {
+                if (!remoteMatchesServerFilter(remote, normalizedFilter)) {
                     continue;
                 }
 
@@ -881,9 +944,7 @@ public class MainActivity extends Activity {
                     String status = item.optString("status", "");
                     String error = item.optString("error", "");
 
-                    String remoteSearchable = remote.toLowerCase();
-
-                    if (!serverFilter.isEmpty() && !remoteSearchable.contains(serverFilter)) {
+                    if (!remoteMatchesServerFilter(remote, serverFilter)) {
                         continue;
                     }
 
