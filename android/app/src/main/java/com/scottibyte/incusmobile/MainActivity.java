@@ -26,7 +26,7 @@ import java.util.UUID;
 
 public class MainActivity extends Activity {
     private static final String API_BASE_URL = "https://incusmobile.scottibyte.com";
-    private static final String APP_VERSION = "0.1.3";
+    private static final String APP_VERSION = "0.1.4";
     private static final String PREFS_NAME = "scottibyte_incus_mobile";
     private static final String PREF_DEVICE_ID = "device_id";
     private static final String PREF_BEARER_TOKEN = "bearer_token";
@@ -36,6 +36,7 @@ public class MainActivity extends Activity {
     private TextView statusView;
     private TextView deviceIdView;
     private TextView tokenView;
+    private TextView dashboardView;
     private EditText deviceNameInput;
     private final Handler pairingHandler = new Handler(Looper.getMainLooper());
     private boolean pairingPollingActive = false;
@@ -86,15 +87,20 @@ public class MainActivity extends Activity {
         checkApprovalButton.setOnClickListener(v -> checkPairingStatus());
 
         Button summaryButton = new Button(this);
-        summaryButton.setText("Test Authorized Summary");
-        summaryButton.setOnClickListener(v -> testAuthorizedSummary());
+        summaryButton.setText("Refresh Summary");
+        summaryButton.setOnClickListener(v -> loadAuthorizedHome());
 
         Button resetButton = new Button(this);
-        resetButton.setText("Reset Local Token");
+        resetButton.setText("Reset Pairing");
         resetButton.setOnClickListener(v -> resetLocalToken());
 
         tokenView = new TextView(this);
         tokenView.setTextSize(14);
+
+        dashboardView = new TextView(this);
+        dashboardView.setTextSize(18);
+        dashboardView.setTypeface(Typeface.DEFAULT_BOLD);
+        dashboardView.setText("\nNot paired yet.");
 
         statusView = new TextView(this);
         statusView.setText("\nStatus: Ready");
@@ -110,12 +116,17 @@ public class MainActivity extends Activity {
         layout.addView(summaryButton);
         layout.addView(resetButton);
         layout.addView(tokenView);
+        layout.addView(dashboardView);
         layout.addView(statusView);
 
         scroll.addView(layout);
         setContentView(scroll);
 
         refreshTokenStatus();
+
+        if (hasBearerToken()) {
+            loadAuthorizedHome();
+        }
     }
 
     private void ensureDeviceId() {
@@ -143,6 +154,11 @@ public class MainActivity extends Activity {
         return prefs.getString(PREF_BEARER_TOKEN, null);
     }
 
+    private boolean hasBearerToken() {
+        String token = getBearerToken();
+        return token != null && !token.trim().isEmpty();
+    }
+
     private void saveDeviceName() {
         prefs.edit()
             .putString(PREF_DEVICE_NAME, deviceNameInput.getText().toString().trim())
@@ -155,6 +171,7 @@ public class MainActivity extends Activity {
             .apply();
 
         refreshTokenStatus();
+        loadAuthorizedHome();
     }
 
     private void refreshTokenStatus() {
@@ -171,6 +188,7 @@ public class MainActivity extends Activity {
         stopPairingPolling();
         prefs.edit().remove(PREF_BEARER_TOKEN).apply();
         refreshTokenStatus();
+        dashboardView.setText("\nNot paired yet.");
         setStatus("Local token removed. Server approval was not changed.");
     }
 
@@ -327,15 +345,16 @@ public class MainActivity extends Activity {
         }).start();
     }
 
-    private void testAuthorizedSummary() {
+    private void loadAuthorizedHome() {
         String token = getBearerToken();
 
         if (token == null || token.trim().isEmpty()) {
-            setStatus("No bearer token stored. Request pairing, approve the device, then claim the token.");
+            dashboardView.setText("\nNot paired yet.");
+            setStatus("No bearer token stored. Request pairing and wait for admin approval.");
             return;
         }
 
-        setStatus("Testing authorized mobile summary...");
+        setStatus("Loading mobile summary...");
 
         new Thread(() -> {
             try {
@@ -346,11 +365,68 @@ public class MainActivity extends Activity {
                     token
                 );
 
+                if (result.code >= 200 && result.code < 300) {
+                    JSONObject json = new JSONObject(result.body);
+                    if (json.optBoolean("ok")) {
+                        setDashboardFromSummary(json);
+                        setStatus("Summary updated.");
+                        return;
+                    }
+                }
+
                 setStatus(result.toDisplayString());
             } catch (Exception e) {
                 setStatus(errorText(e));
             }
         }).start();
+    }
+
+    private void setDashboardFromSummary(JSONObject json) {
+        new Handler(Looper.getMainLooper()).post(() -> {
+            try {
+                JSONObject client = json.optJSONObject("client");
+                JSONObject summary = json.optJSONObject("summary");
+
+                String device = "Unknown device";
+                String role = "unknown";
+
+                if (client != null) {
+                    device = client.optString("display_name",
+                        client.optString("device_name",
+                            client.optString("device_id", "Unknown device")
+                        )
+                    );
+                    role = client.optString("role", "unknown");
+                }
+
+                int total = summary != null ? summary.optInt("instances_total", 0) : 0;
+                int running = summary != null ? summary.optInt("running", 0) : 0;
+                int stopped = summary != null ? summary.optInt("stopped", 0) : 0;
+                int notRunning = summary != null ? summary.optInt("not_running", 0) : 0;
+                int containers = summary != null ? summary.optInt("containers_total", 0) : 0;
+                int vms = summary != null ? summary.optInt("virtual_machines_total", 0) : 0;
+                int errors = summary != null ? summary.optInt("errors", 0) : 0;
+
+                String dashboard =
+                    "\nAuthorized" +
+                    "\nDevice: " + device +
+                    "\nRole: " + role +
+                    "\n" +
+                    "\nInstances" +
+                    "\nTotal: " + total +
+                    "\nRunning: " + running +
+                    "\nStopped: " + stopped +
+                    "\nNot Running: " + notRunning +
+                    "\nContainers: " + containers +
+                    "\nVMs: " + vms +
+                    "\nErrors: " + errors;
+
+                dashboardView.setText(dashboard);
+            } catch (Exception e) {
+                dashboardView.setText("\nUnable to render summary.");
+                setStatus(errorText(e));
+            }
+        });
     }
 
     private HttpResult httpRequest(String method, String path, String jsonBody, String bearerToken) throws Exception {
