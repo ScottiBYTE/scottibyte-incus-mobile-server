@@ -34,7 +34,7 @@ import java.util.Map;
 
 public class MainActivity extends Activity {
     private static final String API_BASE_URL = "https://incusmobile.scottibyte.com";
-    private static final String APP_VERSION = "0.2.0";
+    private static final String APP_VERSION = "0.2.1";
     private static final String PREFS_NAME = "scottibyte_incus_mobile";
     private static final String PREF_DEVICE_ID = "device_id";
     private static final String PREF_BEARER_TOKEN = "bearer_token";
@@ -52,6 +52,7 @@ public class MainActivity extends Activity {
     private Button resetButton;
     private TextView dashboardView;
     private TextView remoteSummaryView;
+    private TextView selectedServerView;
     private TextView instancesView;
     private TextView instanceDetailView;
     private EditText serverFilterInput;
@@ -130,6 +131,10 @@ public class MainActivity extends Activity {
         remoteSummaryView.setTextSize(14);
         remoteSummaryView.setText("\nServers\nTap View Instances to load server summary.");
 
+        selectedServerView = new TextView(this);
+        selectedServerView.setTextSize(14);
+        selectedServerView.setText("\nSelected Server\nNo server selected.");
+
         instancesView = new TextView(this);
         instancesView.setTextSize(14);
         instancesView.setText("\nInstances: not loaded");
@@ -195,6 +200,7 @@ public class MainActivity extends Activity {
         layout.addView(tokenView);
         layout.addView(dashboardView);
         layout.addView(remoteSummaryView);
+        layout.addView(selectedServerView);
         layout.addView(serverFilterInput);
         layout.addView(instanceFilterInput);
         layout.addView(instancesView);
@@ -305,6 +311,7 @@ public class MainActivity extends Activity {
         serverFilterInput.setText("");
         instanceFilterInput.setText("");
         remoteSummaryView.setText("\nServers\nTap View Instances to load server summary.");
+        selectedServerView.setText("\nSelected Server\nNo server selected.");
         instancesView.setText("\nInstances: not loaded");
         instanceDetailView.setText("\nSelected Instance\nNo instance selected.");
         setStatus("Local token removed. Server approval was not changed. Request pairing again if needed.");
@@ -674,6 +681,93 @@ public class MainActivity extends Activity {
         });
     }
 
+    private void renderSelectedServerSummary(String serverFilter) {
+        if (selectedServerView == null) {
+            return;
+        }
+
+        try {
+            if (lastInstances == null || lastInstances.length() == 0) {
+                selectedServerView.setText("\nSelected Server\nNo server data loaded.");
+                return;
+            }
+
+            if (serverFilter == null || serverFilter.trim().isEmpty()) {
+                selectedServerView.setText("\nSelected Server\nNo server selected. Type a server filter to drill down.");
+                return;
+            }
+
+            String normalizedFilter = serverFilter.trim().toLowerCase();
+
+            String selectedRemote = "";
+            int total = 0;
+            int running = 0;
+            int stopped = 0;
+            int errors = 0;
+
+            for (int i = 0; i < lastInstances.length(); i++) {
+                JSONObject item = lastInstances.optJSONObject(i);
+                if (item == null) {
+                    continue;
+                }
+
+                String remote = item.optString("remote", "unknown");
+                if (remote == null || remote.trim().isEmpty()) {
+                    remote = "unknown";
+                }
+
+                if (!remote.toLowerCase().contains(normalizedFilter)) {
+                    continue;
+                }
+
+                if (selectedRemote.isEmpty()) {
+                    selectedRemote = remote;
+                }
+
+                if (item.optBoolean("error")) {
+                    errors++;
+                    continue;
+                }
+
+                total++;
+
+                String status = item.optString("status", "");
+                if ("Running".equalsIgnoreCase(status)) {
+                    running++;
+                } else if ("Stopped".equalsIgnoreCase(status)) {
+                    stopped++;
+                }
+            }
+
+            if (selectedRemote.isEmpty() && errors == 0 && total == 0) {
+                selectedServerView.setText(
+                    "\nSelected Server\nNo server matching \"" + serverFilter + "\"."
+                );
+                return;
+            }
+
+            StringBuilder out = new StringBuilder();
+            out.append("\nSelected Server\n")
+               .append(selectedRemote.isEmpty() ? serverFilter : selectedRemote)
+               .append("\n")
+               .append("Instances: ")
+               .append(total)
+               .append("\n")
+               .append("Running: ")
+               .append(running)
+               .append("\n")
+               .append("Stopped: ")
+               .append(stopped)
+               .append("\n")
+               .append("Errors: ")
+               .append(errors);
+
+            selectedServerView.setText(out.toString());
+        } catch (Exception e) {
+            selectedServerView.setText("\nSelected Server\nUnable to render server selection.");
+        }
+    }
+
     private void renderInstancesList() {
         new Handler(Looper.getMainLooper()).post(() -> {
             try {
@@ -694,23 +788,23 @@ public class MainActivity extends Activity {
                     ? instanceFilterInput.getText().toString().trim().toLowerCase()
                     : "";
 
+                renderSelectedServerSummary(serverFilter);
+
                 StringBuilder out = new StringBuilder();
                 int matched = 0;
                 int shown = 0;
                 int maxShown = 50;
                 JSONObject firstMatch = null;
 
-                out.append("\nInstances");
+                out.append("\nInstances\n");
 
                 if (!serverFilter.isEmpty()) {
-                    out.append(" on server matching ").append('"').append(serverFilter).append('"');
+                    out.append("Server: ").append(serverFilter).append("\n");
                 }
 
                 if (!filter.isEmpty()) {
-                    out.append(" matching ").append('"').append(filter).append('"');
+                    out.append("Filter: ").append(filter).append("\n");
                 }
-
-                out.append("\n");
 
                 for (int i = 0; i < lastInstances.length(); i++) {
                     JSONObject item = lastInstances.optJSONObject(i);
