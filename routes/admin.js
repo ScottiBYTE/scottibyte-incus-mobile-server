@@ -425,6 +425,26 @@ router.delete('/remotes/:name', async (req, res) => {
 
 
 
+
+router.get('/operations-preview', (req, res) => {
+  try {
+    const roles = ['viewer', 'operator', 'admin'];
+
+    res.json({
+      ok: true,
+      preview: roles.map((role) => ({
+        role,
+        operations: listOperationDefinitionsForRole(role)
+      }))
+    });
+  } catch (err) {
+    res.status(500).json({
+      ok: false,
+      error: err.message
+    });
+  }
+});
+
 router.get('/operations', (req, res) => {
   try {
     res.json({
