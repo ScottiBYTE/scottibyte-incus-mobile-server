@@ -35,7 +35,7 @@ import java.util.Map;
 
 public class MainActivity extends Activity {
     private static final String API_BASE_URL = "https://incusmobile.scottibyte.com";
-    private static final String APP_VERSION = "0.3.1";
+    private static final String APP_VERSION = "0.3.2";
     private static final String PREFS_NAME = "scottibyte_incus_mobile";
     private static final String PREF_DEVICE_ID = "device_id";
     private static final String PREF_BEARER_TOKEN = "bearer_token";
@@ -56,6 +56,7 @@ public class MainActivity extends Activity {
     private LinearLayout serverCardsContainer;
     private TextView selectedServerView;
     private TextView instancesView;
+    private LinearLayout instanceCardsContainer;
     private TextView instanceDetailView;
     private EditText serverFilterInput;
     private EditText instanceFilterInput;
@@ -144,6 +145,9 @@ public class MainActivity extends Activity {
         instancesView.setTextSize(14);
         instancesView.setText("\nInstances: not loaded");
 
+        instanceCardsContainer = new LinearLayout(this);
+        instanceCardsContainer.setOrientation(LinearLayout.VERTICAL);
+
         serverFilterInput = new EditText(this);
         serverFilterInput.setHint("Server filter, for example mondo");
         serverFilterInput.setSingleLine(true);
@@ -211,6 +215,7 @@ public class MainActivity extends Activity {
         layout.addView(serverFilterInput);
         layout.addView(instanceFilterInput);
         layout.addView(instancesView);
+        layout.addView(instanceCardsContainer);
         layout.addView(instanceDetailView);
         layout.addView(statusView);
 
@@ -323,6 +328,9 @@ public class MainActivity extends Activity {
         }
         selectedServerView.setText("\nSelected Server\nNo server selected.");
         instancesView.setText("\nInstances: not loaded");
+        if (instanceCardsContainer != null) {
+            instanceCardsContainer.removeAllViews();
+        }
         instanceDetailView.setText("\nSelected Instance\nNo instance selected.");
         setStatus("Local token removed. Server approval was not changed. Request pairing again if needed.");
     }
@@ -920,6 +928,7 @@ public class MainActivity extends Activity {
                 int matched = 0;
                 int shown = 0;
                 int maxShown = 50;
+                ArrayList<JSONObject> matchedInstances = new ArrayList<>();
                 JSONObject firstMatch = null;
 
                 out.append("\nInstances\n");
@@ -955,6 +964,7 @@ public class MainActivity extends Activity {
                     }
 
                     matched++;
+                    matchedInstances.add(item);
 
                     if (firstMatch == null) {
                         firstMatch = item;
@@ -966,28 +976,12 @@ public class MainActivity extends Activity {
 
                     shown++;
 
-                    if (item.optBoolean("error")) {
-                        out.append("\n")
-                           .append(remote.isEmpty() ? "unknown" : remote)
-                           .append(": ERROR - ")
-                           .append(error.isEmpty() ? "unknown error" : error)
-                           .append("\n");
-                        continue;
-                    }
-
-                    out.append("\n")
-                       .append(remote)
-                       .append(":")
-                       .append(name)
-                       .append("\n  ")
-                       .append(status)
-                       .append(" / ")
-                       .append(type)
-                       .append("\n");
+                    // Instance details are rendered as graphical cards below.
                 }
 
                 if (matched == 0) {
                     out.append("\nNo matching instances.");
+                    renderInstanceCards(matchedInstances);
                     setInstanceDetail(null);
                 } else {
                     out.append("\nShowing ")
@@ -1003,12 +997,105 @@ public class MainActivity extends Activity {
                 }
 
                 instancesView.setText(out.toString());
+                renderInstanceCards(matchedInstances);
                 setInstanceDetail(firstMatch);
             } catch (Exception e) {
                 instancesView.setText("\nUnable to render instances.");
                 setStatus(errorText(e));
             }
         });
+    }
+
+    private void renderInstanceCards(ArrayList<JSONObject> instances) {
+        if (instanceCardsContainer == null) {
+            return;
+        }
+
+        instanceCardsContainer.removeAllViews();
+
+        if (instances == null || instances.size() == 0) {
+            return;
+        }
+
+        int maxCards = Math.min(instances.size(), 50);
+
+        for (int i = 0; i < maxCards; i++) {
+            JSONObject item = instances.get(i);
+            if (item == null) {
+                continue;
+            }
+
+            String remote = item.optString("remote", "");
+            String project = item.optString("project", "");
+            String name = item.optString("name", item.optString("instance", item.optString("id", "")));
+            String type = item.optString("type", "");
+            String status = item.optString("status", "");
+            String error = item.optString("error", "");
+
+            LinearLayout card = new LinearLayout(this);
+            card.setOrientation(LinearLayout.VERTICAL);
+            card.setPadding(28, 22, 28, 22);
+
+            LinearLayout.LayoutParams cardParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            );
+            cardParams.setMargins(0, 8, 0, 8);
+            card.setLayoutParams(cardParams);
+
+            boolean running = "Running".equalsIgnoreCase(status);
+            boolean stopped = "Stopped".equalsIgnoreCase(status);
+            boolean hasError = item.optBoolean("error") || !error.isEmpty();
+
+            GradientDrawable background = new GradientDrawable();
+            background.setCornerRadius(22);
+
+            if (hasError) {
+                background.setStroke(3, 0xFFF87171);
+                background.setColor(0xFF3B1111);
+            } else if (running) {
+                background.setStroke(2, 0xFF34D399);
+                background.setColor(0xFF10261E);
+            } else if (stopped) {
+                background.setStroke(2, 0xFFFBBF24);
+                background.setColor(0xFF2A2110);
+            } else {
+                background.setStroke(2, 0xFF64748B);
+                background.setColor(0xFF111827);
+            }
+
+            card.setBackground(background);
+
+            TextView title = new TextView(this);
+            title.setText(remote + ":" + name);
+            title.setTextSize(17);
+            title.setTypeface(Typeface.DEFAULT_BOLD);
+            title.setTextColor(0xFFFFFFFF);
+
+            TextView meta = new TextView(this);
+            if (hasError) {
+                meta.setText("ERROR: " + (error.isEmpty() ? "unknown error" : error));
+            } else {
+                StringBuilder metaText = new StringBuilder();
+                metaText.append(status.isEmpty() ? "Unknown" : status)
+                    .append(" / ")
+                    .append(type.isEmpty() ? "unknown type" : type);
+
+                if (!project.isEmpty()) {
+                    metaText.append("\\nProject: ").append(project);
+                }
+
+                meta.setText(metaText.toString());
+            }
+
+            meta.setTextSize(14);
+            meta.setTextColor(0xFFD1D5DB);
+
+            card.addView(title);
+            card.addView(meta);
+
+            instanceCardsContainer.addView(card);
+        }
     }
 
     private void setInstanceDetail(JSONObject item) {
