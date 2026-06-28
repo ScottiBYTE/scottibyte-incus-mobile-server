@@ -35,7 +35,7 @@ import java.util.Map;
 
 public class MainActivity extends Activity {
     private static final String API_BASE_URL = "https://incusmobile.scottibyte.com";
-    private static final String APP_VERSION = "0.3.5";
+    private static final String APP_VERSION = "0.3.6";
     private static final String PREFS_NAME = "scottibyte_incus_mobile";
     private static final String PREF_DEVICE_ID = "device_id";
     private static final String PREF_BEARER_TOKEN = "bearer_token";
@@ -54,6 +54,7 @@ public class MainActivity extends Activity {
     private Button resetButton;
     private TextView dashboardView;
     private TextView remoteSummaryView;
+    private TextView serversSectionView;
     private LinearLayout serverCardsContainer;
     private TextView selectedServerView;
     private TextView instancesView;
@@ -105,6 +106,7 @@ public class MainActivity extends Activity {
         healthButton = new Button(this);
         healthButton.setText("Server Health");
         healthButton.setOnClickListener(v -> testHealth());
+        healthButton.setVisibility(View.GONE);
 
         requestPairingButton = new Button(this);
         requestPairingButton.setText("Request Pairing");
@@ -117,6 +119,7 @@ public class MainActivity extends Activity {
         summaryButton = new Button(this);
         summaryButton.setText("Refresh");
         summaryButton.setOnClickListener(v -> loadAuthorizedHome());
+        summaryButton.setVisibility(View.GONE);
 
         instancesButton = new Button(this);
         instancesButton.setText("Load / Refresh");
@@ -140,7 +143,14 @@ public class MainActivity extends Activity {
 
         remoteSummaryView = new TextView(this);
         remoteSummaryView.setTextSize(14);
-        remoteSummaryView.setText("\nServers\nTap View Instances to load server summary.");
+        remoteSummaryView.setText("\nServers\nTap Load / Refresh to load server cards.");
+        remoteSummaryView.setVisibility(View.GONE);
+
+        serversSectionView = new TextView(this);
+        serversSectionView.setText("\nServers");
+        serversSectionView.setTextSize(18);
+        serversSectionView.setTypeface(Typeface.DEFAULT_BOLD);
+        serversSectionView.setTextColor(0xFFFFFFFF);
 
         serverCardsContainer = new LinearLayout(this);
         serverCardsContainer.setOrientation(LinearLayout.VERTICAL);
@@ -152,6 +162,7 @@ public class MainActivity extends Activity {
         instancesView = new TextView(this);
         instancesView.setTextSize(14);
         instancesView.setText("\nInstances: not loaded");
+        instancesView.setVisibility(View.GONE);
 
         instanceCardsContainer = new LinearLayout(this);
         instanceCardsContainer.setOrientation(LinearLayout.VERTICAL);
@@ -230,6 +241,7 @@ public class MainActivity extends Activity {
         layout.addView(resetButton);
         layout.addView(tokenView);
         layout.addView(dashboardView);
+        layout.addView(serversSectionView);
         layout.addView(remoteSummaryView);
         layout.addView(serverCardsContainer);
         layout.addView(selectedServerView);
@@ -268,6 +280,10 @@ public class MainActivity extends Activity {
             instanceFilterInput.setVisibility(View.GONE);
         }
 
+        if (serversSectionView != null) {
+            serversSectionView.setVisibility(View.VISIBLE);
+        }
+
         if (serverCardsContainer != null) {
             serverCardsContainer.setVisibility(View.VISIBLE);
         }
@@ -279,6 +295,10 @@ public class MainActivity extends Activity {
 
         if (backToServersButton != null) {
             backToServersButton.setVisibility(View.GONE);
+        }
+
+        if (remoteSummaryView != null) {
+            remoteSummaryView.setVisibility(View.GONE);
         }
 
         if (instancesView != null) {
@@ -302,9 +322,14 @@ public class MainActivity extends Activity {
         }
 
         suppressFilterEvents = false;
+        hidePrototypeTextViews();
     }
 
     private void showServerDrilldownView() {
+        if (serversSectionView != null) {
+            serversSectionView.setVisibility(View.GONE);
+        }
+
         if (serverCardsContainer != null) {
             serverCardsContainer.setVisibility(View.GONE);
         }
@@ -325,8 +350,12 @@ public class MainActivity extends Activity {
             instanceFilterInput.setVisibility(View.VISIBLE);
         }
 
+        if (remoteSummaryView != null) {
+            remoteSummaryView.setVisibility(View.GONE);
+        }
+
         if (instancesView != null) {
-            instancesView.setVisibility(View.VISIBLE);
+            instancesView.setVisibility(View.GONE);
         }
 
         if (instanceCardsContainer != null) {
@@ -340,6 +369,8 @@ public class MainActivity extends Activity {
         if (selectedInstanceCardContainer != null) {
             selectedInstanceCardContainer.setVisibility(View.VISIBLE);
         }
+
+        hidePrototypeTextViews();
     }
 
     private void updateAuthUiVisibility() {
@@ -354,7 +385,7 @@ public class MainActivity extends Activity {
         }
 
         if (summaryButton != null) {
-            summaryButton.setVisibility(authorized ? View.VISIBLE : View.GONE);
+            summaryButton.setVisibility(View.GONE);
         }
 
         if (instancesButton != null) {
@@ -366,7 +397,7 @@ public class MainActivity extends Activity {
         }
 
         if (healthButton != null) {
-            healthButton.setVisibility(View.VISIBLE);
+            healthButton.setVisibility(View.GONE);
         }
     }
 
@@ -451,6 +482,32 @@ public class MainActivity extends Activity {
         new Handler(Looper.getMainLooper()).post(() ->
             statusView.setText("\nStatus:\n" + message)
         );
+    }
+
+    private void hidePrototypeTextViews() {
+        if (tokenView != null) {
+            tokenView.setVisibility(View.GONE);
+        }
+
+        if (dashboardView != null) {
+            dashboardView.setVisibility(View.GONE);
+        }
+
+        if (remoteSummaryView != null) {
+            remoteSummaryView.setVisibility(View.GONE);
+        }
+
+        if (instancesView != null) {
+            instancesView.setVisibility(View.GONE);
+        }
+
+        if (serverFilterInput != null) {
+            serverFilterInput.setVisibility(View.GONE);
+        }
+
+        if (statusView != null) {
+            statusView.setVisibility(View.GONE);
+        }
     }
 
     private void testHealth() {
@@ -677,6 +734,7 @@ public class MainActivity extends Activity {
                     "\nErrors: " + errors;
 
                 dashboardView.setText(dashboard);
+                dashboardView.setVisibility(View.GONE);
             } catch (Exception e) {
                 dashboardView.setText("\nUnable to render summary.");
                 setStatus(errorText(e));
@@ -954,21 +1012,20 @@ public class MainActivity extends Activity {
 
         try {
             if (lastInstances == null || lastInstances.length() == 0) {
-                selectedServerView.setText("\nSelected Server\nNo server data loaded.");
+                selectedServerView.setText("\nNo server data loaded.");
                 return;
             }
 
             if (serverFilter == null || serverFilter.trim().isEmpty()) {
-                selectedServerView.setText("\nSelected Server\nNo server selected. Type a server filter to drill down.");
+                selectedServerView.setText("\nNo server selected.");
                 return;
             }
 
-            String normalizedFilter = serverFilter.trim().toLowerCase();
-            String selectedRemote = "";
             int total = 0;
             int running = 0;
             int stopped = 0;
             int errors = 0;
+            String displayName = serverFilter;
 
             for (int i = 0; i < lastInstances.length(); i++) {
                 JSONObject item = lastInstances.optJSONObject(i);
@@ -976,17 +1033,13 @@ public class MainActivity extends Activity {
                     continue;
                 }
 
-                String remote = item.optString("remote", "unknown");
-                if (remote == null || remote.trim().isEmpty()) {
-                    remote = "unknown";
-                }
-
-                if (!remoteMatchesServerFilter(remote, normalizedFilter)) {
+                String remote = item.optString("remote", "");
+                if (!remoteMatchesServerFilter(remote, serverFilter)) {
                     continue;
                 }
 
-                if (selectedRemote.isEmpty()) {
-                    selectedRemote = remote;
+                if (displayName.equals(serverFilter) && remote != null && !remote.trim().isEmpty()) {
+                    displayName = remote;
                 }
 
                 if (item.optBoolean("error")) {
@@ -1004,32 +1057,30 @@ public class MainActivity extends Activity {
                 }
             }
 
-            if (selectedRemote.isEmpty() && errors == 0 && total == 0) {
-                selectedServerView.setText(
-                    "\nSelected Server\nNo server matching \"" + serverFilter + "\"."
-                );
+            if (total == 0 && errors == 0) {
+                selectedServerView.setText("\n" + serverFilter + "\nNo matching server.");
                 return;
             }
 
             StringBuilder out = new StringBuilder();
-            out.append("\nSelected Server\n")
-               .append(selectedRemote.isEmpty() ? serverFilter : selectedRemote)
+            out.append("\n")
+               .append(displayName)
                .append("\n")
-               .append("Instances: ")
                .append(total)
+               .append(" instances")
                .append("\n")
-               .append("Running: ")
                .append(running)
-               .append("\n")
-               .append("Stopped: ")
+               .append(" running / ")
                .append(stopped)
-               .append("\n")
-               .append("Errors: ")
-               .append(errors);
+               .append(" stopped");
+
+            if (errors > 0) {
+                out.append(" / ").append(errors).append(" errors");
+            }
 
             selectedServerView.setText(out.toString());
         } catch (Exception e) {
-            selectedServerView.setText("\nSelected Server\nUnable to render server selection.");
+            selectedServerView.setText("\nUnable to render selected server.");
         }
     }
 
@@ -1234,7 +1285,7 @@ public class MainActivity extends Activity {
                     .append(type.isEmpty() ? "unknown type" : type);
 
                 if (!project.isEmpty()) {
-                    metaText.append("\\nProject: ").append(project);
+                    metaText.append("\nProject: ").append(project);
                 }
 
                 meta.setText(metaText.toString());
