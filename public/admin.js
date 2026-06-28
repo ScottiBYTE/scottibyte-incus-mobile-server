@@ -351,6 +351,7 @@ async function addRemote() {
     incus_port: $('addRemoteIncusPort').value.trim() || '8443',
     ssh_user: $('addRemoteSshUser').value.trim(),
     ssh_port: $('addRemoteSshPort').value.trim() || '22',
+    ssh_password: $('addRemoteSshPassword').value,
     trust_name: $('addRemoteTrustName').value.trim() || 'IncusMobileServer'
   };
 
@@ -373,6 +374,7 @@ async function addRemote() {
   } catch (err) {
     alert(err.message);
   } finally {
+    $('addRemoteSshPassword').value = '';
     btn.disabled = false;
     btn.textContent = 'Add Remote';
   }

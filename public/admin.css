@@ -1246,3 +1246,15 @@ body.light-theme .remote-add-grid label span {
   align-self: end;
 }
 
+
+/* Add Remote one-time SSH password field */
+.remote-add-grid {
+  grid-template-columns: 1fr 1.35fr 0.7fr 0.9fr 0.65fr 1.1fr 1.1fr auto;
+}
+
+@media (max-width: 1400px) {
+  .remote-add-grid {
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+  }
+}
+

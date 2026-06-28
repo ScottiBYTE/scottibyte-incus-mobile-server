@@ -1,4 +1,7 @@
-const { execFile } = require('child_process');
+const { execFile, execFileSync } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+const { Client } = require('ssh2');
 
 function runIncus(args, timeoutMs = 30000) {
   return new Promise((resolve, reject) => {
@@ -127,6 +130,246 @@ function normalizePort(value, defaultPort) {
   return port;
 }
 
+
+function getDataDir() {
+  return path.resolve(__dirname, process.env.DATA_DIR || './data');
+}
+
+function getSshDir() {
+  return path.join(getDataDir(), 'ssh');
+}
+
+function getPrivateKeyPath() {
+  return path.join(getSshDir(), 'incus_mobile_ed25519');
+}
+
+function getPublicKeyPath() {
+  return `${getPrivateKeyPath()}.pub`;
+}
+
+function sshString(value) {
+  const buf = Buffer.from(value, 'utf8');
+  const len = Buffer.alloc(4);
+  len.writeUInt32BE(buf.length, 0);
+  return Buffer.concat([len, buf]);
+}
+
+function publicKeyToOpenSsh(publicKeyObject) {
+  const der = publicKeyObject.export({ type: 'spki', format: 'der' });
+
+  // Ed25519 SPKI DER header is 12 bytes, followed by the 32-byte public key.
+  const raw = der.subarray(-32);
+  const type = 'ssh-ed25519';
+
+  const body = Buffer.concat([
+    sshString(type),
+    sshString(raw)
+  ]).toString('base64');
+
+  return `${type} ${body} IncusMobileServer`;
+}
+
+function ensureAppSshKey() {
+  const sshDir = getSshDir();
+  const privateKeyPath = getPrivateKeyPath();
+  const publicKeyPath = getPublicKeyPath();
+
+  fs.mkdirSync(sshDir, { recursive: true, mode: 0o700 });
+
+  let regenerate = false;
+
+  if (fs.existsSync(privateKeyPath) && fs.existsSync(publicKeyPath)) {
+    const existingPrivateKey = fs.readFileSync(privateKeyPath, 'utf8');
+
+    // ssh2 expects OpenSSH private key format for Ed25519. Older generated
+    // PKCS8 keys look like "BEGIN PRIVATE KEY" and are not accepted here.
+    if (!existingPrivateKey.includes('BEGIN OPENSSH PRIVATE KEY')) {
+      regenerate = true;
+    } else {
+      fs.chmodSync(privateKeyPath, 0o600);
+      fs.chmodSync(publicKeyPath, 0o644);
+
+      return {
+        privateKeyPath,
+        publicKeyPath,
+        privateKey: existingPrivateKey,
+        publicKey: fs.readFileSync(publicKeyPath, 'utf8').trim()
+      };
+    }
+  } else {
+    regenerate = true;
+  }
+
+  if (regenerate) {
+    fs.rmSync(privateKeyPath, { force: true });
+    fs.rmSync(publicKeyPath, { force: true });
+
+    execFileSync('ssh-keygen', [
+      '-t', 'ed25519',
+      '-N', '',
+      '-C', 'IncusMobileServer',
+      '-f', privateKeyPath
+    ], {
+      stdio: 'ignore'
+    });
+
+    fs.chmodSync(privateKeyPath, 0o600);
+    fs.chmodSync(publicKeyPath, 0o644);
+  }
+
+  return {
+    privateKeyPath,
+    publicKeyPath,
+    privateKey: fs.readFileSync(privateKeyPath, 'utf8'),
+    publicKey: fs.readFileSync(publicKeyPath, 'utf8').trim()
+  };
+}
+
+function shellQuote(value) {
+  return `'${String(value).replace(/'/g, `'\\''`)}'`;
+}
+
+function connectSsh({ host, port, username, password, privateKey }) {
+  return new Promise((resolve, reject) => {
+    const conn = new Client();
+
+    conn.on('ready', () => resolve(conn));
+
+    conn.on('error', (err) => {
+      reject(err);
+    });
+
+    const options = {
+      host,
+      port,
+      username,
+      readyTimeout: 20000
+    };
+
+    if (password) {
+      options.password = password;
+    }
+
+    if (privateKey) {
+      options.privateKey = privateKey;
+    }
+
+    conn.connect(options);
+  });
+}
+
+function execSshCommand(conn, command, timeoutMs = 30000) {
+  return new Promise((resolve, reject) => {
+    let timer = null;
+
+    conn.exec(command, (err, stream) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+
+      let stdout = '';
+      let stderr = '';
+
+      timer = setTimeout(() => {
+        stream.close();
+        reject(new Error(`SSH command timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
+
+      stream.on('close', (code) => {
+        clearTimeout(timer);
+
+        if (code === 0) {
+          resolve(`${stdout}${stderr}`);
+        } else {
+          reject(new Error(stderr || stdout || `SSH command failed with exit code ${code}`));
+        }
+      });
+
+      stream.on('data', (data) => {
+        stdout += data.toString();
+      });
+
+      stream.stderr.on('data', (data) => {
+        stderr += data.toString();
+      });
+    });
+  });
+}
+
+async function installManagedSshKey({ host, port, username, password }) {
+  const key = ensureAppSshKey();
+
+  if (!password) {
+    throw new Error('SSH password is required the first time this server installs its managed SSH key on a target host');
+  }
+
+  const conn = await connectSsh({
+    host,
+    port,
+    username,
+    password
+  });
+
+  try {
+    const publicKey = shellQuote(key.publicKey);
+
+    const command = [
+      'umask 077',
+      'mkdir -p ~/.ssh',
+      'touch ~/.ssh/authorized_keys',
+      `grep -qxF ${publicKey} ~/.ssh/authorized_keys || printf "%s\\n" ${publicKey} >> ~/.ssh/authorized_keys`,
+      'chmod 700 ~/.ssh',
+      'chmod 600 ~/.ssh/authorized_keys'
+    ].join(' && ');
+
+    await execSshCommand(conn, command, 30000);
+  } finally {
+    conn.end();
+  }
+
+  return key;
+}
+
+async function runManagedSshCommand({ host, port, username, command, password }) {
+  const key = ensureAppSshKey();
+
+  let conn;
+
+  try {
+    conn = await connectSsh({
+      host,
+      port,
+      username,
+      privateKey: key.privateKey
+    });
+  } catch (err) {
+    if (!password) {
+      throw new Error(`Managed SSH key is not trusted by ${username}@${host}. Provide SSH password once so the app can install its public key.`);
+    }
+
+    await installManagedSshKey({
+      host,
+      port,
+      username,
+      password
+    });
+
+    conn = await connectSsh({
+      host,
+      port,
+      username,
+      privateKey: key.privateKey
+    });
+  }
+
+  try {
+    return await execSshCommand(conn, command, 30000);
+  } finally {
+    conn.end();
+  }
+}
+
 function parseTrustToken(output) {
   const text = String(output || '');
   const lines = text
@@ -151,17 +394,6 @@ function parseTrustToken(output) {
   return token;
 }
 
-async function runSsh(args, timeoutMs = 30000) {
-  return new Promise((resolve, reject) => {
-    execFile('ssh', args, { timeout: timeoutMs }, (error, stdout, stderr) => {
-      if (error) {
-        reject(new Error(stderr || stdout || error.message));
-        return;
-      }
-      resolve(`${stdout || ''}${stderr || ''}`);
-    });
-  });
-}
 
 async function addRemoteViaSsh(options = {}) {
   const name = validateRemoteName(options.name);
@@ -186,14 +418,15 @@ async function addRemoteViaSsh(options = {}) {
     throw new Error(`Remote "${name}" already exists`);
   }
 
-  const sshTarget = `${sshUser}@${host}`;
-  const sshOutput = await runSsh([
-    '-p', String(sshPort),
-    '-o', 'BatchMode=yes',
-    '-o', 'StrictHostKeyChecking=accept-new',
-    sshTarget,
-    'incus', 'config', 'trust', 'add', trustName
-  ], 30000);
+  const sshPassword = String(options.ssh_password || '');
+
+  const sshOutput = await runManagedSshCommand({
+    host,
+    port: sshPort,
+    username: sshUser,
+    password: sshPassword,
+    command: `incus config trust add ${shellQuote(trustName)}`
+  });
 
   const token = parseTrustToken(sshOutput);
 
