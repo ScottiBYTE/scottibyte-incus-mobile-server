@@ -35,7 +35,7 @@ import java.util.Map;
 
 public class MainActivity extends Activity {
     private static final String API_BASE_URL = "https://incusmobile.scottibyte.com";
-    private static final String APP_VERSION = "0.3.3";
+    private static final String APP_VERSION = "0.3.4";
     private static final String PREFS_NAME = "scottibyte_incus_mobile";
     private static final String PREF_DEVICE_ID = "device_id";
     private static final String PREF_BEARER_TOKEN = "bearer_token";
@@ -50,6 +50,7 @@ public class MainActivity extends Activity {
     private Button checkApprovalButton;
     private Button summaryButton;
     private Button instancesButton;
+    private Button backToServersButton;
     private Button resetButton;
     private TextView dashboardView;
     private TextView remoteSummaryView;
@@ -116,8 +117,12 @@ public class MainActivity extends Activity {
         summaryButton.setOnClickListener(v -> loadAuthorizedHome());
 
         instancesButton = new Button(this);
-        instancesButton.setText("View Instances");
+        instancesButton.setText("Load / Refresh");
         instancesButton.setOnClickListener(v -> loadInstances());
+
+        backToServersButton = new Button(this);
+        backToServersButton.setText("Back to Servers");
+        backToServersButton.setOnClickListener(v -> showServerListView());
 
         resetButton = new Button(this);
         resetButton.setText("Reset Pairing");
@@ -215,6 +220,7 @@ public class MainActivity extends Activity {
         layout.addView(remoteSummaryView);
         layout.addView(serverCardsContainer);
         layout.addView(selectedServerView);
+        layout.addView(backToServersButton);
         layout.addView(serverFilterInput);
         layout.addView(instanceFilterInput);
         layout.addView(instancesView);
@@ -227,9 +233,96 @@ public class MainActivity extends Activity {
 
         refreshTokenStatus();
         updateAuthUiVisibility();
+        showServerListView();
 
         if (hasBearerToken()) {
             loadAuthorizedHome();
+        }
+    }
+
+    private void showServerListView() {
+        selectedInstanceKey = "";
+
+        if (serverFilterInput != null) {
+            serverFilterInput.setText("");
+        }
+
+        if (instanceFilterInput != null) {
+            instanceFilterInput.setText("");
+        }
+
+        if (serverCardsContainer != null) {
+            serverCardsContainer.setVisibility(View.VISIBLE);
+        }
+
+        if (selectedServerView != null) {
+            selectedServerView.setText("\nSelected Server\nNo server selected.");
+            selectedServerView.setVisibility(View.GONE);
+        }
+
+        if (backToServersButton != null) {
+            backToServersButton.setVisibility(View.GONE);
+        }
+
+        if (serverFilterInput != null) {
+            serverFilterInput.setVisibility(View.GONE);
+        }
+
+        if (instanceFilterInput != null) {
+            instanceFilterInput.setVisibility(View.GONE);
+        }
+
+        if (instancesView != null) {
+            instancesView.setText("\nInstances\nSelect a server to view instances.");
+            instancesView.setVisibility(View.GONE);
+        }
+
+        if (instanceCardsContainer != null) {
+            instanceCardsContainer.removeAllViews();
+            instanceCardsContainer.setVisibility(View.GONE);
+        }
+
+        if (instanceDetailView != null) {
+            instanceDetailView.setText("\nSelected Instance\nNo instance selected.");
+            instanceDetailView.setVisibility(View.GONE);
+        }
+
+        if (lastInstances != null) {
+            renderRemoteSummary();
+        }
+    }
+
+    private void showServerDrilldownView() {
+        if (serverCardsContainer != null) {
+            serverCardsContainer.setVisibility(View.GONE);
+        }
+
+        if (selectedServerView != null) {
+            selectedServerView.setVisibility(View.VISIBLE);
+        }
+
+        if (backToServersButton != null) {
+            backToServersButton.setVisibility(View.VISIBLE);
+        }
+
+        if (serverFilterInput != null) {
+            serverFilterInput.setVisibility(View.GONE);
+        }
+
+        if (instanceFilterInput != null) {
+            instanceFilterInput.setVisibility(View.VISIBLE);
+        }
+
+        if (instancesView != null) {
+            instancesView.setVisibility(View.VISIBLE);
+        }
+
+        if (instanceCardsContainer != null) {
+            instanceCardsContainer.setVisibility(View.VISIBLE);
+        }
+
+        if (instanceDetailView != null) {
+            instanceDetailView.setVisibility(View.VISIBLE);
         }
     }
 
@@ -614,7 +707,17 @@ public class MainActivity extends Activity {
     private void setInstancesFromResponse(JSONObject json) {
         lastInstances = json.optJSONArray("instances");
         renderRemoteSummary();
-        renderInstancesList();
+
+        String serverFilter = serverFilterInput != null
+            ? serverFilterInput.getText().toString().trim()
+            : "";
+
+        if (serverFilter.isEmpty()) {
+            showServerListView();
+        } else {
+            showServerDrilldownView();
+            renderInstancesList();
+        }
     }
 
     private void renderRemoteSummary() {
@@ -759,11 +862,14 @@ public class MainActivity extends Activity {
             card.setClickable(true);
             card.setFocusable(true);
             card.setOnClickListener(v -> {
+                selectedInstanceKey = "";
+
                 if (serverFilterInput != null) {
                     serverFilterInput.setText(remote);
                     serverFilterInput.setSelection(serverFilterInput.getText().length());
                 }
 
+                showServerDrilldownView();
                 renderInstancesList();
             });
 
