@@ -32,6 +32,7 @@ function validateMobileToken(req, res, next) {
       id,
       device_id,
       device_name,
+      display_name,
       status,
       role
     FROM mobile_clients

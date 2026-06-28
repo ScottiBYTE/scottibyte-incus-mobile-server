@@ -49,9 +49,19 @@ router.get('/summary', async (req, res) => {
     const stopped = valid.filter(i => i.status === 'Stopped').length;
     const notRunning = valid.length - running;
 
+    const client = req.mobileClient || null;
+
     res.json({
       ok: true,
       generated_at: new Date().toISOString(),
+      client: client ? {
+        id: client.id,
+        device_id: client.device_id,
+        device_name: client.device_name,
+        display_name: client.display_name || client.device_name || client.device_id,
+        status: client.status,
+        role: client.role
+      } : null,
       summary: {
         containers_total: valid.filter(i => i.type === 'container').length,
         virtual_machines_total: valid.filter(i => i.type === 'virtual-machine').length,
