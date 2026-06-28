@@ -35,7 +35,7 @@ import java.util.Map;
 
 public class MainActivity extends Activity {
     private static final String API_BASE_URL = "https://incusmobile.scottibyte.com";
-    private static final String APP_VERSION = "0.3.4";
+    private static final String APP_VERSION = "0.3.5";
     private static final String PREFS_NAME = "scottibyte_incus_mobile";
     private static final String PREF_DEVICE_ID = "device_id";
     private static final String PREF_BEARER_TOKEN = "bearer_token";
@@ -59,10 +59,12 @@ public class MainActivity extends Activity {
     private TextView instancesView;
     private LinearLayout instanceCardsContainer;
     private TextView instanceDetailView;
+    private LinearLayout selectedInstanceCardContainer;
     private EditText serverFilterInput;
     private EditText instanceFilterInput;
     private JSONArray lastInstances = null;
     private String selectedInstanceKey = "";
+    private boolean suppressFilterEvents = false;
     private EditText deviceNameInput;
     private final Handler pairingHandler = new Handler(Looper.getMainLooper());
     private boolean pairingPollingActive = false;
@@ -168,6 +170,10 @@ public class MainActivity extends Activity {
 
             @Override
             public void afterTextChanged(Editable value) {
+                if (suppressFilterEvents) {
+                    return;
+                }
+
                 if (instancesView != null && instanceDetailView != null && lastInstances != null) {
                     selectedInstanceKey = "";
                     renderRemoteSummary();
@@ -190,6 +196,10 @@ public class MainActivity extends Activity {
 
             @Override
             public void afterTextChanged(Editable value) {
+                if (suppressFilterEvents) {
+                    return;
+                }
+
                 if (instancesView != null && instanceDetailView != null && lastInstances != null) {
                     selectedInstanceKey = "";
                     renderInstancesList();
@@ -199,7 +209,10 @@ public class MainActivity extends Activity {
 
         instanceDetailView = new TextView(this);
         instanceDetailView.setTextSize(14);
-        instanceDetailView.setText("\nSelected Instance\nNo instance selected.");
+        instanceDetailView.setText("\nSelected Instance");
+
+        selectedInstanceCardContainer = new LinearLayout(this);
+        selectedInstanceCardContainer.setOrientation(LinearLayout.VERTICAL);
 
         statusView = new TextView(this);
         statusView.setText("\nStatus: Ready");
@@ -226,6 +239,7 @@ public class MainActivity extends Activity {
         layout.addView(instancesView);
         layout.addView(instanceCardsContainer);
         layout.addView(instanceDetailView);
+        layout.addView(selectedInstanceCardContainer);
         layout.addView(statusView);
 
         scroll.addView(layout);
@@ -242,13 +256,16 @@ public class MainActivity extends Activity {
 
     private void showServerListView() {
         selectedInstanceKey = "";
+        suppressFilterEvents = true;
 
         if (serverFilterInput != null) {
             serverFilterInput.setText("");
+            serverFilterInput.setVisibility(View.GONE);
         }
 
         if (instanceFilterInput != null) {
             instanceFilterInput.setText("");
+            instanceFilterInput.setVisibility(View.GONE);
         }
 
         if (serverCardsContainer != null) {
@@ -264,14 +281,6 @@ public class MainActivity extends Activity {
             backToServersButton.setVisibility(View.GONE);
         }
 
-        if (serverFilterInput != null) {
-            serverFilterInput.setVisibility(View.GONE);
-        }
-
-        if (instanceFilterInput != null) {
-            instanceFilterInput.setVisibility(View.GONE);
-        }
-
         if (instancesView != null) {
             instancesView.setText("\nInstances\nSelect a server to view instances.");
             instancesView.setVisibility(View.GONE);
@@ -283,13 +292,16 @@ public class MainActivity extends Activity {
         }
 
         if (instanceDetailView != null) {
-            instanceDetailView.setText("\nSelected Instance\nNo instance selected.");
+            instanceDetailView.setText("\nSelected Instance");
             instanceDetailView.setVisibility(View.GONE);
         }
 
-        if (lastInstances != null) {
-            renderRemoteSummary();
+        if (selectedInstanceCardContainer != null) {
+            selectedInstanceCardContainer.removeAllViews();
+            selectedInstanceCardContainer.setVisibility(View.GONE);
         }
+
+        suppressFilterEvents = false;
     }
 
     private void showServerDrilldownView() {
@@ -323,6 +335,10 @@ public class MainActivity extends Activity {
 
         if (instanceDetailView != null) {
             instanceDetailView.setVisibility(View.VISIBLE);
+        }
+
+        if (selectedInstanceCardContainer != null) {
+            selectedInstanceCardContainer.setVisibility(View.VISIBLE);
         }
     }
 
@@ -692,7 +708,6 @@ public class MainActivity extends Activity {
                     JSONObject json = new JSONObject(result.body);
                     if (json.optBoolean("ok")) {
                         setInstancesFromResponse(json);
-                        setStatus("Instances updated.");
                         return;
                     }
                 }
@@ -706,18 +721,23 @@ public class MainActivity extends Activity {
 
     private void setInstancesFromResponse(JSONObject json) {
         lastInstances = json.optJSONArray("instances");
-        renderRemoteSummary();
 
-        String serverFilter = serverFilterInput != null
-            ? serverFilterInput.getText().toString().trim()
-            : "";
+        new Handler(Looper.getMainLooper()).post(() -> {
+            String serverFilter = serverFilterInput != null
+                ? serverFilterInput.getText().toString().trim()
+                : "";
 
-        if (serverFilter.isEmpty()) {
-            showServerListView();
-        } else {
-            showServerDrilldownView();
-            renderInstancesList();
-        }
+            if (serverFilter.isEmpty()) {
+                showServerListView();
+                renderRemoteSummary();
+                setStatus("Servers updated.");
+            } else {
+                showServerDrilldownView();
+                renderRemoteSummary();
+                renderInstancesList();
+                setStatus("Instances updated.");
+            }
+        });
     }
 
     private void renderRemoteSummary() {
@@ -863,12 +883,14 @@ public class MainActivity extends Activity {
             card.setFocusable(true);
             card.setOnClickListener(v -> {
                 selectedInstanceKey = "";
+                suppressFilterEvents = true;
 
                 if (serverFilterInput != null) {
                     serverFilterInput.setText(remote);
                     serverFilterInput.setSelection(serverFilterInput.getText().length());
                 }
 
+                suppressFilterEvents = false;
                 showServerDrilldownView();
                 renderInstancesList();
             });
@@ -1236,14 +1258,93 @@ public class MainActivity extends Activity {
         }
     }
 
+    private void renderSelectedInstanceCard(JSONObject item) {
+        if (selectedInstanceCardContainer == null) {
+            return;
+        }
+
+        selectedInstanceCardContainer.removeAllViews();
+
+        if (item == null) {
+            TextView empty = new TextView(this);
+            empty.setText("No instance selected.");
+            empty.setTextSize(14);
+            empty.setTextColor(0xFFD1D5DB);
+            selectedInstanceCardContainer.addView(empty);
+            return;
+        }
+
+        String remote = item.optString("remote", "");
+        String project = item.optString("project", "");
+        String name = item.optString("name", item.optString("instance", item.optString("id", "")));
+        String type = item.optString("type", "");
+        String status = item.optString("status", "");
+        String architecture = item.optString("architecture", "");
+        String location = item.optString("location", "");
+        String createdAt = item.optString("created_at", "");
+        String lastUsedAt = item.optString("last_used_at", "");
+        String error = item.optString("error", "");
+
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(30, 24, 30, 24);
+
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        params.setMargins(0, 10, 0, 16);
+        card.setLayoutParams(params);
+
+        GradientDrawable background = new GradientDrawable();
+        background.setCornerRadius(26);
+        background.setStroke(4, 0xFF60A5FA);
+        background.setColor(0xFF111827);
+        card.setBackground(background);
+
+        TextView title = new TextView(this);
+        title.setText(name.isEmpty() ? "Selected Instance" : name);
+        title.setTextSize(20);
+        title.setTypeface(Typeface.DEFAULT_BOLD);
+        title.setTextColor(0xFFFFFFFF);
+
+        TextView details = new TextView(this);
+        StringBuilder out = new StringBuilder();
+
+        if (item.optBoolean("error") || !error.isEmpty()) {
+            out.append("Remote: ").append(remote).append("\n");
+            out.append("Error: ").append(error.isEmpty() ? "unknown error" : error).append("\n");
+        } else {
+            appendDetailLine(out, "Remote", remote);
+            appendDetailLine(out, "Project", project);
+            appendDetailLine(out, "Type", type);
+            appendDetailLine(out, "Status", status);
+            appendDetailLine(out, "Architecture", architecture);
+            appendDetailLine(out, "Location", location);
+            appendDetailLine(out, "Created", createdAt);
+            appendDetailLine(out, "Last Used", lastUsedAt);
+        }
+
+        details.setText(out.toString().trim());
+        details.setTextSize(14);
+        details.setTextColor(0xFFD1D5DB);
+
+        card.addView(title);
+        card.addView(details);
+
+        selectedInstanceCardContainer.addView(card);
+    }
+
     private void setInstanceDetail(JSONObject item) {
         if (instanceDetailView == null) {
             return;
         }
 
         try {
+            renderSelectedInstanceCard(item);
+
             if (item == null) {
-                instanceDetailView.setText("\nSelected Instance\nNo instance selected.");
+                instanceDetailView.setText("\nSelected Instance");
                 return;
             }
 
@@ -1286,7 +1387,7 @@ public class MainActivity extends Activity {
             appendDetailLine(detail, "Created", createdAt);
             appendDetailLine(detail, "Last Used", lastUsedAt);
 
-            instanceDetailView.setText(detail.toString());
+            instanceDetailView.setText("\nSelected Instance");
         } catch (Exception e) {
             instanceDetailView.setText("\nSelected Instance\nUnable to render instance detail.");
         }
