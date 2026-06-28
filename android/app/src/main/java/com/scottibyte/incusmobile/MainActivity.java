@@ -34,7 +34,7 @@ import java.util.Map;
 
 public class MainActivity extends Activity {
     private static final String API_BASE_URL = "https://incusmobile.scottibyte.com";
-    private static final String APP_VERSION = "0.1.9";
+    private static final String APP_VERSION = "0.2.0";
     private static final String PREFS_NAME = "scottibyte_incus_mobile";
     private static final String PREF_DEVICE_ID = "device_id";
     private static final String PREF_BEARER_TOKEN = "bearer_token";
@@ -54,6 +54,7 @@ public class MainActivity extends Activity {
     private TextView remoteSummaryView;
     private TextView instancesView;
     private TextView instanceDetailView;
+    private EditText serverFilterInput;
     private EditText instanceFilterInput;
     private JSONArray lastInstances = null;
     private EditText deviceNameInput;
@@ -133,8 +134,28 @@ public class MainActivity extends Activity {
         instancesView.setTextSize(14);
         instancesView.setText("\nInstances: not loaded");
 
+        serverFilterInput = new EditText(this);
+        serverFilterInput.setHint("Server filter, for example mondo");
+        serverFilterInput.setSingleLine(true);
+        serverFilterInput.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence value, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence value, int start, int before, int count) {
+            }
+
+            @Override
+            public void afterTextChanged(Editable value) {
+                if (instancesView != null && instanceDetailView != null && lastInstances != null) {
+                    renderInstancesList();
+                }
+            }
+        });
+
         instanceFilterInput = new EditText(this);
-        instanceFilterInput.setHint("Filter instances");
+        instanceFilterInput.setHint("Instance filter");
         instanceFilterInput.setSingleLine(true);
         instanceFilterInput.addTextChangedListener(new TextWatcher() {
             @Override
@@ -174,6 +195,7 @@ public class MainActivity extends Activity {
         layout.addView(tokenView);
         layout.addView(dashboardView);
         layout.addView(remoteSummaryView);
+        layout.addView(serverFilterInput);
         layout.addView(instanceFilterInput);
         layout.addView(instancesView);
         layout.addView(instanceDetailView);
@@ -280,6 +302,7 @@ public class MainActivity extends Activity {
         refreshTokenStatus();
         dashboardView.setText("\nHome\nNot paired yet.");
         lastInstances = null;
+        serverFilterInput.setText("");
         instanceFilterInput.setText("");
         remoteSummaryView.setText("\nServers\nTap View Instances to load server summary.");
         instancesView.setText("\nInstances: not loaded");
@@ -663,6 +686,10 @@ public class MainActivity extends Activity {
                     return;
                 }
 
+                String serverFilter = serverFilterInput != null
+                    ? serverFilterInput.getText().toString().trim().toLowerCase()
+                    : "";
+
                 String filter = instanceFilterInput != null
                     ? instanceFilterInput.getText().toString().trim().toLowerCase()
                     : "";
@@ -674,6 +701,10 @@ public class MainActivity extends Activity {
                 JSONObject firstMatch = null;
 
                 out.append("\nInstances");
+
+                if (!serverFilter.isEmpty()) {
+                    out.append(" on server matching ").append('"').append(serverFilter).append('"');
+                }
 
                 if (!filter.isEmpty()) {
                     out.append(" matching ").append('"').append(filter).append('"');
@@ -692,6 +723,12 @@ public class MainActivity extends Activity {
                     String type = item.optString("type", "");
                     String status = item.optString("status", "");
                     String error = item.optString("error", "");
+
+                    String remoteSearchable = remote.toLowerCase();
+
+                    if (!serverFilter.isEmpty() && !remoteSearchable.contains(serverFilter)) {
+                        continue;
+                    }
 
                     String searchable = (remote + " " + name + " " + type + " " + status + " " + error).toLowerCase();
 
