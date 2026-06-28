@@ -150,20 +150,6 @@ function renderRemotes() {
   const rows = sortRows(state.remotes, state.remoteSort);
   const tbody = $('remotesBody');
 
-  const addRow = `
-    <tr class="add-row">
-      <td><input id="newRemoteName" placeholder="mondo"></td>
-      <td><input id="newRemoteHost" placeholder="mondo or 172.16.x.x"></td>
-      <td><input id="newRemoteIncusPort" placeholder="8443"></td>
-      <td><input id="newRemoteSshUser" placeholder="scott"></td>
-      <td><input id="newRemoteSshPort" placeholder="22"></td>
-      <td><input id="newRemoteTrustName" placeholder="IncusMobileServer"></td>
-      <td colspan="2">
-        <button id="addRemoteBtn" class="btn primary">Add Remote</button>
-      </td>
-    </tr>
-  `;
-
   const remoteRows = rows.map((r) => {
     const test = state.remoteTests[r.name];
     const status = test
@@ -191,7 +177,7 @@ function renderRemotes() {
     `;
   }).join('');
 
-  tbody.innerHTML = addRow + remoteRows;
+  tbody.innerHTML = remoteRows;
 
   const addBtn = $('addRemoteBtn');
   if (addBtn) addBtn.addEventListener('click', addRemote);
@@ -360,12 +346,12 @@ function attachSortHandlers() {
 
 async function addRemote() {
   const payload = {
-    name: $('newRemoteName').value.trim(),
-    host: $('newRemoteHost').value.trim(),
-    incus_port: $('newRemoteIncusPort').value.trim() || '8443',
-    ssh_user: $('newRemoteSshUser').value.trim(),
-    ssh_port: $('newRemoteSshPort').value.trim() || '22',
-    trust_name: $('newRemoteTrustName').value.trim() || 'IncusMobileServer'
+    name: $('addRemoteName').value.trim(),
+    host: $('addRemoteHost').value.trim(),
+    incus_port: $('addRemoteIncusPort').value.trim() || '8443',
+    ssh_user: $('addRemoteSshUser').value.trim(),
+    ssh_port: $('addRemoteSshPort').value.trim() || '22',
+    trust_name: $('addRemoteTrustName').value.trim() || 'IncusMobileServer'
   };
 
   if (!payload.name || !payload.host || !payload.ssh_user) {

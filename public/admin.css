@@ -1145,3 +1145,104 @@ body.light-theme .logout-btn:hover {
   background: #dc2626 !important;
 }
 
+
+/* Remote Management split layout */
+.remote-add-section {
+  margin: 14px 0 18px;
+  padding: 14px;
+  border: 1px solid rgba(56, 189, 248, 0.22);
+  border-radius: 14px;
+  background: rgba(14, 116, 144, 0.10);
+}
+
+.remote-add-section h3,
+.authorized-remotes-section h3 {
+  margin: 0 0 6px;
+  font-size: 1rem;
+}
+
+.remote-add-grid {
+  display: grid;
+  grid-template-columns: 1.1fr 1.5fr 0.75fr 1fr 0.7fr 1.2fr auto;
+  gap: 10px;
+  align-items: end;
+  margin-top: 10px;
+}
+
+.remote-add-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.remote-add-grid label span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.remote-add-grid input {
+  width: 100%;
+}
+
+.remote-add-btn {
+  white-space: nowrap;
+  min-height: 34px;
+}
+
+.authorized-remotes-section {
+  margin-top: 8px;
+}
+
+body.light-theme .remote-add-section {
+  background: #e0f2fe;
+  border-color: #38bdf8;
+}
+
+body.light-theme .remote-add-grid label span {
+  color: #334155;
+}
+
+@media (max-width: 1200px) {
+  .remote-add-grid {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+
+  .remote-add-btn {
+    width: 100%;
+  }
+}
+
+@media (max-width: 720px) {
+  .remote-add-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Remote add form compact polish */
+.remote-add-section {
+  padding: 10px 12px;
+}
+
+.remote-add-section .remote-note {
+  margin-bottom: 8px;
+}
+
+.remote-add-grid {
+  gap: 8px;
+}
+
+.remote-add-grid label span {
+  margin-bottom: 1px;
+}
+
+.remote-add-grid input {
+  min-height: 32px;
+}
+
+.remote-add-btn {
+  min-height: 32px;
+  padding: 7px 12px;
+  align-self: end;
+}
+
