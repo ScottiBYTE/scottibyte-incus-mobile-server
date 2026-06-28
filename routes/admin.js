@@ -7,7 +7,8 @@ const {
   listOperationDefinitionsForRole,
   listAllOperationDefinitions,
   setOperationEnabled,
-  setOperationRole
+  setOperationRole,
+  dryRunOperationRequest
 } = require('../operations');
 
 const router = express.Router();
@@ -544,6 +545,60 @@ router.post('/operations/:operationKey/role', (req, res) => {
       metadata: {
         operation: operationKey,
         role_required: roleRequired
+      }
+    });
+
+    res.status(400).json({
+      ok: false,
+      error: err.message
+    });
+  }
+});
+
+
+
+router.post('/operations/dry-run', (req, res) => {
+  const body = req.body || {};
+
+  try {
+    const result = dryRunOperationRequest({
+      operation: body.operation,
+      target_type: body.target_type,
+      target_id: body.target_id,
+      params: body.params || {}
+    }, body.role || 'operator');
+
+    logAuditEvent({
+      ...getAdminActor(req),
+      event_type: 'operation.dry_run',
+      target_type: body.target_type || 'unknown',
+      target_id: body.target_id || '',
+      result: result.allowed ? 'success' : 'blocked',
+      message: result.allowed
+        ? `Dry run allowed for ${body.operation}`
+        : `Dry run blocked for ${body.operation}: ${result.reason}`,
+      metadata: {
+        operation: body.operation,
+        simulated_role: body.role || 'operator',
+        dry_run: result
+      }
+    });
+
+    res.json({
+      ok: true,
+      dry_run: result
+    });
+  } catch (err) {
+    logAuditEvent({
+      ...getAdminActor(req),
+      event_type: 'operation.dry_run',
+      target_type: body.target_type || 'unknown',
+      target_id: body.target_id || '',
+      result: 'failed',
+      message: err.message,
+      metadata: {
+        operation: body.operation,
+        simulated_role: body.role || 'operator'
       }
     });
 

@@ -357,6 +357,144 @@ function getMobileActor(req) {
   };
 }
 
+
+function dryRunOperationRequest(request, simulatedRole = 'operator') {
+  const role = String(simulatedRole || 'operator').trim();
+
+  if (!Object.prototype.hasOwnProperty.call(ROLE_RANK, role)) {
+    throw new Error('Invalid simulated role');
+  }
+
+  const operationKey = validateOperationKey(request.operation);
+  const targetType = validateTargetType(request.target_type);
+  const targetId = String(request.target_id || '').trim();
+
+  if (!targetId) {
+    throw new Error('target_id is required');
+  }
+
+  const operation = getOperationDefinition(operationKey);
+
+  if (!operation) {
+    return {
+      allowed: false,
+      reason: 'Unknown operation',
+      operation: operationKey,
+      target_type: targetType,
+      target_id: targetId
+    };
+  }
+
+  if (!operation.enabled) {
+    return {
+      allowed: false,
+      reason: 'Operation disabled',
+      operation: operationKey,
+      target_type: targetType,
+      target_id: targetId
+    };
+  }
+
+  if (operation.target_type !== targetType) {
+    return {
+      allowed: false,
+      reason: `Operation requires target_type ${operation.target_type}`,
+      operation: operationKey,
+      target_type: targetType,
+      target_id: targetId
+    };
+  }
+
+  if (!roleAllowed(role, operation.role_required)) {
+    return {
+      allowed: false,
+      reason: `Role ${role} cannot run ${operationKey}; ${operation.role_required} required`,
+      operation: operationKey,
+      target_type: targetType,
+      target_id: targetId
+    };
+  }
+
+  let params;
+  try {
+    params = validateParams(request.params, operation.allowed_params, operation.required_params);
+  } catch (err) {
+    return {
+      allowed: false,
+      reason: err.message,
+      operation: operationKey,
+      target_type: targetType,
+      target_id: targetId
+    };
+  }
+
+  let target;
+  try {
+    target = parseTarget(targetType, targetId);
+  } catch (err) {
+    return {
+      allowed: false,
+      reason: err.message,
+      operation: operationKey,
+      target_type: targetType,
+      target_id: targetId
+    };
+  }
+
+  try {
+    checkProtectedTarget(operation, target);
+  } catch (err) {
+    return {
+      allowed: false,
+      reason: err.message,
+      operation: operationKey,
+      target_type: targetType,
+      target_id: targetId
+    };
+  }
+
+  if (operation.runner_type !== 'incus_cli') {
+    return {
+      allowed: false,
+      reason: `Unsupported operation runner: ${operation.runner_type}`,
+      operation: operationKey,
+      target_type: targetType,
+      target_id: targetId
+    };
+  }
+
+  let argv;
+  try {
+    argv = buildArgv(operation, {
+      operation: operationKey,
+      target,
+      params
+    });
+  } catch (err) {
+    return {
+      allowed: false,
+      reason: err.message,
+      operation: operationKey,
+      target_type: targetType,
+      target_id: targetId
+    };
+  }
+
+  return {
+    allowed: true,
+    reason: 'Operation would be allowed',
+    operation: operationKey,
+    label: operation.label,
+    role,
+    role_required: operation.role_required,
+    target_type: targetType,
+    target_id: targetId,
+    params,
+    runner_type: operation.runner_type,
+    argv
+  };
+}
+
 async function executeOperationRequest(req, request) {
   const actor = getMobileActor(req);
   const operationKey = validateOperationKey(request.operation);
@@ -628,5 +766,6 @@ module.exports = {
   listAllOperationDefinitions,
   setOperationEnabled,
   setOperationRole,
+  dryRunOperationRequest,
   executeOperationRequest
 };
