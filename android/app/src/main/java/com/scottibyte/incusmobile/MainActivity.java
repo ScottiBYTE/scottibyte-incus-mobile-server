@@ -27,10 +27,14 @@ import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 public class MainActivity extends Activity {
     private static final String API_BASE_URL = "https://incusmobile.scottibyte.com";
-    private static final String APP_VERSION = "0.1.8";
+    private static final String APP_VERSION = "0.1.9";
     private static final String PREFS_NAME = "scottibyte_incus_mobile";
     private static final String PREF_DEVICE_ID = "device_id";
     private static final String PREF_BEARER_TOKEN = "bearer_token";
@@ -47,6 +51,7 @@ public class MainActivity extends Activity {
     private Button instancesButton;
     private Button resetButton;
     private TextView dashboardView;
+    private TextView remoteSummaryView;
     private TextView instancesView;
     private TextView instanceDetailView;
     private EditText instanceFilterInput;
@@ -120,6 +125,10 @@ public class MainActivity extends Activity {
         dashboardView.setTypeface(Typeface.DEFAULT_BOLD);
         dashboardView.setText("\nHome\nNot paired yet.");
 
+        remoteSummaryView = new TextView(this);
+        remoteSummaryView.setTextSize(14);
+        remoteSummaryView.setText("\nServers\nTap View Instances to load server summary.");
+
         instancesView = new TextView(this);
         instancesView.setTextSize(14);
         instancesView.setText("\nInstances: not loaded");
@@ -164,6 +173,7 @@ public class MainActivity extends Activity {
         layout.addView(resetButton);
         layout.addView(tokenView);
         layout.addView(dashboardView);
+        layout.addView(remoteSummaryView);
         layout.addView(instanceFilterInput);
         layout.addView(instancesView);
         layout.addView(instanceDetailView);
@@ -271,6 +281,7 @@ public class MainActivity extends Activity {
         dashboardView.setText("\nHome\nNot paired yet.");
         lastInstances = null;
         instanceFilterInput.setText("");
+        remoteSummaryView.setText("\nServers\nTap View Instances to load server summary.");
         instancesView.setText("\nInstances: not loaded");
         instanceDetailView.setText("\nSelected Instance\nNo instance selected.");
         setStatus("Local token removed. Server approval was not changed. Request pairing again if needed.");
@@ -551,7 +562,93 @@ public class MainActivity extends Activity {
 
     private void setInstancesFromResponse(JSONObject json) {
         lastInstances = json.optJSONArray("instances");
+        renderRemoteSummary();
         renderInstancesList();
+    }
+
+    private void renderRemoteSummary() {
+        new Handler(Looper.getMainLooper()).post(() -> {
+            try {
+                if (remoteSummaryView == null) {
+                    return;
+                }
+
+                if (lastInstances == null || lastInstances.length() == 0) {
+                    remoteSummaryView.setText("\nServers\nNo server data loaded.");
+                    return;
+                }
+
+                Map<String, int[]> counts = new LinkedHashMap<>();
+
+                for (int i = 0; i < lastInstances.length(); i++) {
+                    JSONObject item = lastInstances.optJSONObject(i);
+                    if (item == null) {
+                        continue;
+                    }
+
+                    String remote = item.optString("remote", "unknown");
+                    if (remote.trim().isEmpty()) {
+                        remote = "unknown";
+                    }
+
+                    int[] row = counts.get(remote);
+                    if (row == null) {
+                        // total, running, stopped, errors
+                        row = new int[] {0, 0, 0, 0};
+                        counts.put(remote, row);
+                    }
+
+                    if (item.optBoolean("error")) {
+                        row[3]++;
+                        continue;
+                    }
+
+                    row[0]++;
+
+                    String status = item.optString("status", "");
+                    if ("Running".equalsIgnoreCase(status)) {
+                        row[1]++;
+                    } else if ("Stopped".equalsIgnoreCase(status)) {
+                        row[2]++;
+                    }
+                }
+
+                ArrayList<String> remotes = new ArrayList<>(counts.keySet());
+                Collections.sort(remotes);
+
+                StringBuilder out = new StringBuilder();
+                out.append("\nServers\n");
+
+                for (String remote : remotes) {
+                    int[] row = counts.get(remote);
+                    out.append("\n")
+                       .append(remote)
+                       .append("\n  ")
+                       .append(row[0])
+                       .append(" instances");
+
+                    if (row[1] > 0 || row[2] > 0) {
+                        out.append(" / ")
+                           .append(row[1])
+                           .append(" running / ")
+                           .append(row[2])
+                           .append(" stopped");
+                    }
+
+                    if (row[3] > 0) {
+                        out.append(" / ")
+                           .append(row[3])
+                           .append(" errors");
+                    }
+
+                    out.append("\n");
+                }
+
+                remoteSummaryView.setText(out.toString());
+            } catch (Exception e) {
+                remoteSummaryView.setText("\nServers\nUnable to render server summary.");
+            }
+        });
     }
 
     private void renderInstancesList() {
