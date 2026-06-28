@@ -23,3 +23,9 @@ npm-debug.log*
 
 # Local patch backups
 backups/
+
+# Android build artifacts
+android/.gradle/
+android/**/build/
+*.apk
+*.aab
