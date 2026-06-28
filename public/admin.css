@@ -1258,3 +1258,30 @@ body.light-theme .remote-add-grid label span {
   }
 }
 
+
+/* Section title row */
+.section-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.section-title-row h3 {
+  margin: 0;
+}
+
+.small-btn {
+  padding: 5px 10px;
+  min-height: 28px;
+  font-size: 0.82rem;
+}
+
+
+/* Refresh Remotes visual feedback */
+#refreshRemotesBtn:disabled {
+  opacity: 0.85;
+  cursor: wait;
+}
+

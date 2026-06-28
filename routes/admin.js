@@ -240,7 +240,16 @@ router.post('/remotes/:name/test', async (req, res) => {
 
 router.delete('/remotes/:name', async (req, res) => {
   try {
-    const result = await removeRemote(req.params.name);
+    const name = String(req.params.name || '').trim();
+
+    if (['local', 'images'].includes(name)) {
+      return res.status(400).json({
+        ok: false,
+        error: `Remote "${name}" is reserved and cannot be deleted here`
+      });
+    }
+
+    const result = await removeRemote(name);
 
     res.json({
       ok: true,

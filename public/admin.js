@@ -398,7 +398,18 @@ async function testRemote(name) {
 }
 
 async function deleteRemote(name) {
-  if (!confirm(`Remove Incus remote "${name}" from this server?`)) {
+  const message = [
+    `Delete Incus remote "${name}" from this server?`,
+    '',
+    'This removes the remote from the Incus client configuration used by this app.',
+    'It does not delete containers, VMs, or the remote Incus server.',
+    '',
+    `Type the remote name to confirm: ${name}`
+  ].join("\n");
+
+  const confirmation = prompt(message);
+
+  if (confirmation !== name) {
     return;
   }
 
@@ -406,6 +417,7 @@ async function deleteRemote(name) {
     await fetchJson(`/api/admin/remotes/${encodeURIComponent(name)}`, {
       method: 'DELETE'
     });
+
     delete state.remoteTests[name];
     await loadData();
   } catch (err) {
@@ -577,6 +589,38 @@ function initTheme() {
 }
 
 
+
+async function refreshRemotesOnly() {
+  const btn = $('refreshRemotesBtn');
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Refreshing...';
+  }
+
+  try {
+    await loadData();
+
+    if (btn) {
+      btn.textContent = 'Updated';
+      setTimeout(() => {
+        btn.textContent = 'Refresh Remotes';
+        btn.disabled = false;
+      }, 1200);
+    }
+  } catch (err) {
+    if (btn) {
+      btn.textContent = 'Refresh Failed';
+      setTimeout(() => {
+        btn.textContent = 'Refresh Remotes';
+        btn.disabled = false;
+      }, 1800);
+    }
+
+    alert(err.message || 'Refresh failed');
+  }
+}
+
 async function logoutAdmin() {
   try {
     await fetch('/api/admin/auth/logout', {
@@ -595,6 +639,7 @@ function init() {
 
   $('themeToggleBtn').addEventListener('click', toggleTheme);
   $('logoutBtn').addEventListener('click', logoutAdmin);
+  $('refreshRemotesBtn').addEventListener('click', refreshRemotesOnly);
 
   ['searchInput', 'remoteFilter', 'statusFilter', 'typeFilter'].forEach((id) => {
     $(id).addEventListener('input', renderInstances);
