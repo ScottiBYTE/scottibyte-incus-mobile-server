@@ -326,6 +326,10 @@ function renderOperationsPreview() {
   }
 
   el.innerHTML = `
+    <div class="operations-preview-heading">
+      <strong>Mobile Action Discovery Preview</strong>
+      <span class="note">Shows which enabled operations each mobile role can request. Viewer clients still have read-only inventory access.</span>
+    </div>
     <div class="operations-preview-grid">
       ${state.operationsPreview.map((entry) => {
         const operations = entry.operations || [];
@@ -338,7 +342,7 @@ function renderOperationsPreview() {
               ${
                 names.length
                   ? names.map((name) => bubble(name, 'remote')).join(' ')
-                  : '<span class="muted">none</span>'
+                  : `${bubble('Read-only access', 'remote')}`
               }
             </div>
           </div>
@@ -373,10 +377,6 @@ function renderOperations() {
     const enabledType = op.enabled ? 'good' : 'bad';
     const nextEnabled = op.enabled ? 'false' : 'true';
     const nextLabel = op.enabled ? 'Disable' : 'Enable';
-    const template = Array.isArray(op.argv_template)
-      ? op.argv_template.join(' ')
-      : '-';
-
     return `
       <tr>
         <td>${bubble(op.operation_key, 'remote')}</td>
@@ -387,14 +387,11 @@ function renderOperations() {
         <td>${bubble(enabledText, enabledType)}</td>
         <td>
           <select onchange="changeOperationRole('${escapeHtml(op.operation_key)}', this.value)">
-            <option value="viewer" ${op.role_required === 'viewer' ? 'selected' : ''}>viewer</option>
             <option value="operator" ${op.role_required === 'operator' ? 'selected' : ''}>operator</option>
             <option value="admin" ${op.role_required === 'admin' ? 'selected' : ''}>admin</option>
           </select>
         </td>
         <td>${bubble(op.target_type || '-', 'neutral')}</td>
-        <td>${bubble(op.runner_type || '-', 'neutral')}</td>
-        <td><code>${escapeHtml(template)}</code></td>
         <td>
           <div class="actions">
             <button class="btn ${op.enabled ? 'danger' : 'primary'}" onclick="setOperationEnabled('${escapeHtml(op.operation_key)}', ${nextEnabled})">${nextLabel}</button>

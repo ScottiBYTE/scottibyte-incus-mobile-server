@@ -602,8 +602,8 @@ function setOperationRole(operationKey, roleRequired) {
 
   const role = String(roleRequired || '').trim();
 
-  if (!Object.prototype.hasOwnProperty.call(ROLE_RANK, role)) {
-    throw new Error('Invalid role');
+  if (!['operator', 'admin'].includes(role)) {
+    throw new Error('Operation role must be operator or admin');
   }
 
   const op = getOperationDefinition(operationKey);
