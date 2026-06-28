@@ -35,7 +35,7 @@ import java.util.Map;
 
 public class MainActivity extends Activity {
     private static final String API_BASE_URL = "https://incusmobile.scottibyte.com";
-    private static final String APP_VERSION = "0.3.7";
+    private static final String APP_VERSION = "0.3.9";
     private static final String PREFS_NAME = "scottibyte_incus_mobile";
     private static final String PREF_DEVICE_ID = "device_id";
     private static final String PREF_BEARER_TOKEN = "bearer_token";
@@ -51,10 +51,15 @@ public class MainActivity extends Activity {
     private Button summaryButton;
     private Button instancesButton;
     private Button backToServersButton;
+    private Button backToInstancesButton;
     private Button resetButton;
     private TextView dashboardView;
     private TextView remoteSummaryView;
     private TextView serversSectionView;
+    private LinearLayout fixedHeaderLayout;
+    private TextView brandTitleView;
+    private TextView headerStatsView;
+    private ScrollView mainScrollView;
     private LinearLayout serverCardsContainer;
     private TextView selectedServerView;
     private TextView instancesView;
@@ -75,33 +80,67 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        getWindow().setStatusBarColor(0xFF050716);
+        getWindow().setNavigationBarColor(0xFF050716);
+
         prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
         ensureDeviceId();
 
+        LinearLayout rootLayout = new LinearLayout(this);
+        rootLayout.setOrientation(LinearLayout.VERTICAL);
+        rootLayout.setFitsSystemWindows(true);
+        rootLayout.setBackgroundColor(0xFF050716);
+
+        fixedHeaderLayout = new LinearLayout(this);
+        fixedHeaderLayout.setOrientation(LinearLayout.VERTICAL);
+        fixedHeaderLayout.setPadding(36, 22, 36, 18);
+        fixedHeaderLayout.setBackgroundColor(0xFF050716);
+
+        brandTitleView = new TextView(this);
+        brandTitleView.setText("ScottiBYTE Incus Mobile");
+        brandTitleView.setTextSize(22);
+        brandTitleView.setTypeface(Typeface.DEFAULT_BOLD);
+        brandTitleView.setTextColor(0xFFFFFFFF);
+        brandTitleView.setGravity(Gravity.CENTER_HORIZONTAL);
+
+        headerStatsView = new TextView(this);
+        headerStatsView.setText("Loading servers...");
+        headerStatsView.setTextSize(14);
+        headerStatsView.setTextColor(0xFFD1D5DB);
+        headerStatsView.setGravity(Gravity.CENTER_HORIZONTAL);
+
+        fixedHeaderLayout.addView(brandTitleView);
+        fixedHeaderLayout.addView(headerStatsView);
+
         ScrollView scroll = new ScrollView(this);
+        mainScrollView = scroll;
 
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setPadding(36, 48, 36, 36);
+        layout.setPadding(36, 18, 36, 36);
 
         TextView title = new TextView(this);
         title.setText("ScottiBYTE Incus Mobile");
         title.setTextSize(26);
         title.setTypeface(Typeface.DEFAULT_BOLD);
         title.setGravity(Gravity.CENTER_HORIZONTAL);
+        title.setVisibility(View.GONE);
 
         TextView apiUrl = new TextView(this);
         apiUrl.setText("\nAPI Base URL:\n" + API_BASE_URL);
         apiUrl.setTextSize(15);
+        apiUrl.setVisibility(View.GONE);
 
         deviceIdView = new TextView(this);
         deviceIdView.setText("\nDevice ID:\n" + getLocalDeviceId());
         deviceIdView.setTextSize(14);
+        deviceIdView.setVisibility(View.GONE);
 
         deviceNameInput = new EditText(this);
         deviceNameInput.setHint("Device name");
         deviceNameInput.setSingleLine(true);
         deviceNameInput.setText(getDeviceName());
+        deviceNameInput.setVisibility(View.GONE);
 
         healthButton = new Button(this);
         healthButton.setText("Server Health");
@@ -130,6 +169,15 @@ public class MainActivity extends Activity {
         backToServersButton.setText("Back to Servers");
         backToServersButton.setOnClickListener(v -> showServerListView());
 
+        backToInstancesButton = new Button(this);
+        backToInstancesButton.setText("Back to Instances");
+        backToInstancesButton.setOnClickListener(v -> {
+            selectedInstanceKey = "";
+            showServerDrilldownView();
+            renderInstancesList();
+        });
+        backToInstancesButton.setVisibility(View.GONE);
+
         resetButton = new Button(this);
         resetButton.setText("Reset Pairing");
         resetButton.setOnClickListener(v -> resetLocalToken());
@@ -137,9 +185,11 @@ public class MainActivity extends Activity {
 
         tokenView = new TextView(this);
         tokenView.setTextSize(14);
+        tokenView.setVisibility(View.GONE);
 
         dashboardView = new TextView(this);
         dashboardView.setTextSize(18);
+        dashboardView.setVisibility(View.GONE);
         dashboardView.setTypeface(Typeface.DEFAULT_BOLD);
         dashboardView.setText("\nHome\nNot paired yet.");
 
@@ -230,6 +280,7 @@ public class MainActivity extends Activity {
         statusView = new TextView(this);
         statusView.setText("\nStatus: Ready");
         statusView.setTextSize(16);
+        statusView.setVisibility(View.GONE);
 
         layout.addView(title);
         layout.addView(apiUrl);
@@ -248,6 +299,7 @@ public class MainActivity extends Activity {
         layout.addView(serverCardsContainer);
         layout.addView(selectedServerView);
         layout.addView(backToServersButton);
+        layout.addView(backToInstancesButton);
         layout.addView(serverFilterInput);
         layout.addView(instanceFilterInput);
         layout.addView(instancesView);
@@ -257,7 +309,15 @@ public class MainActivity extends Activity {
         layout.addView(statusView);
 
         scroll.addView(layout);
-        setContentView(scroll);
+
+        rootLayout.addView(fixedHeaderLayout);
+        rootLayout.addView(scroll, new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            0,
+            1
+        ));
+
+        setContentView(rootLayout);
 
         refreshTokenStatus();
         updateAuthUiVisibility();
@@ -265,6 +325,12 @@ public class MainActivity extends Activity {
 
         if (hasBearerToken()) {
             loadInstances();
+        }
+    }
+
+    private void scrollContentToTop() {
+        if (mainScrollView != null) {
+            mainScrollView.post(() -> mainScrollView.smoothScrollTo(0, 0));
         }
     }
 
@@ -299,6 +365,10 @@ public class MainActivity extends Activity {
             backToServersButton.setVisibility(View.GONE);
         }
 
+        if (backToInstancesButton != null) {
+            backToInstancesButton.setVisibility(View.GONE);
+        }
+
         if (remoteSummaryView != null) {
             remoteSummaryView.setVisibility(View.GONE);
         }
@@ -325,6 +395,7 @@ public class MainActivity extends Activity {
 
         suppressFilterEvents = false;
         hidePrototypeTextViews();
+        scrollContentToTop();
     }
 
     private void showServerDrilldownView() {
@@ -342,6 +413,10 @@ public class MainActivity extends Activity {
 
         if (backToServersButton != null) {
             backToServersButton.setVisibility(View.VISIBLE);
+        }
+
+        if (backToInstancesButton != null) {
+            backToInstancesButton.setVisibility(View.GONE);
         }
 
         if (serverFilterInput != null) {
@@ -365,6 +440,63 @@ public class MainActivity extends Activity {
         }
 
         if (instanceDetailView != null) {
+            instanceDetailView.setText("\nSelected Instance");
+            instanceDetailView.setVisibility(View.GONE);
+        }
+
+        if (selectedInstanceCardContainer != null) {
+            selectedInstanceCardContainer.removeAllViews();
+            selectedInstanceCardContainer.setVisibility(View.GONE);
+        }
+
+        hidePrototypeTextViews();
+        scrollContentToTop();
+    }
+
+    private void showInstanceDetailView() {
+        if (serversSectionView != null) {
+            serversSectionView.setVisibility(View.GONE);
+        }
+
+        if (serverCardsContainer != null) {
+            serverCardsContainer.setVisibility(View.GONE);
+        }
+
+        if (selectedServerView != null) {
+            selectedServerView.setVisibility(View.GONE);
+        }
+
+        if (backToServersButton != null) {
+            backToServersButton.setVisibility(View.VISIBLE);
+        }
+
+        if (backToInstancesButton != null) {
+            backToInstancesButton.setVisibility(View.VISIBLE);
+        }
+
+        if (serverFilterInput != null) {
+            serverFilterInput.setVisibility(View.GONE);
+        }
+
+        if (instanceFilterInput != null) {
+            instanceFilterInput.setVisibility(View.GONE);
+        }
+
+        if (remoteSummaryView != null) {
+            remoteSummaryView.setVisibility(View.GONE);
+        }
+
+        if (instancesView != null) {
+            instancesView.setVisibility(View.GONE);
+        }
+
+        if (instanceCardsContainer != null) {
+            instanceCardsContainer.removeAllViews();
+            instanceCardsContainer.setVisibility(View.GONE);
+        }
+
+        if (instanceDetailView != null) {
+            instanceDetailView.setText("\nSelected Instance");
             instanceDetailView.setVisibility(View.VISIBLE);
         }
 
@@ -373,6 +505,7 @@ public class MainActivity extends Activity {
         }
 
         hidePrototypeTextViews();
+        scrollContentToTop();
     }
 
     private void updateAuthUiVisibility() {
@@ -787,6 +920,8 @@ public class MainActivity extends Activity {
                 ? serverFilterInput.getText().toString().trim()
                 : "";
 
+            renderHeaderStats();
+
             if (serverFilter.isEmpty()) {
                 showServerListView();
                 renderRemoteSummary();
@@ -798,6 +933,64 @@ public class MainActivity extends Activity {
                 setStatus("Instances updated.");
             }
         });
+    }
+
+    private void renderHeaderStats() {
+        if (headerStatsView == null) {
+            return;
+        }
+
+        try {
+            if (lastInstances == null || lastInstances.length() == 0) {
+                headerStatsView.setText("No server data loaded.");
+                return;
+            }
+
+            java.util.HashSet<String> servers = new java.util.HashSet<>();
+            java.util.HashSet<String> reachableServers = new java.util.HashSet<>();
+
+            int running = 0;
+            int stopped = 0;
+            int errors = 0;
+
+            for (int i = 0; i < lastInstances.length(); i++) {
+                JSONObject item = lastInstances.optJSONObject(i);
+                if (item == null) {
+                    continue;
+                }
+
+                String remote = item.optString("remote", "unknown");
+                if (remote == null || remote.trim().isEmpty()) {
+                    remote = "unknown";
+                }
+
+                servers.add(remote);
+
+                if (item.optBoolean("error")) {
+                    errors++;
+                    continue;
+                }
+
+                reachableServers.add(remote);
+
+                String status = item.optString("status", "");
+                if ("Running".equalsIgnoreCase(status)) {
+                    running++;
+                } else if ("Stopped".equalsIgnoreCase(status)) {
+                    stopped++;
+                }
+            }
+
+            headerStatsView.setText(
+                servers.size() + " servers / " +
+                reachableServers.size() + " reachable\n" +
+                running + " running / " +
+                stopped + " stopped" +
+                (errors > 0 ? " / " + errors + " errors" : "")
+            );
+        } catch (Exception e) {
+            headerStatsView.setText("Unable to render summary.");
+        }
     }
 
     private void renderRemoteSummary() {
@@ -1180,13 +1373,9 @@ public class MainActivity extends Activity {
                     }
                 }
 
-                if (firstMatch != null && selectedInstanceKey.isEmpty()) {
-                    selectedInstanceKey = getInstanceKey(firstMatch);
-                }
-
                 instancesView.setText(out.toString());
                 renderInstanceCards(matchedInstances);
-                setInstanceDetail(firstMatch);
+                setInstanceDetail(null);
             } catch (Exception e) {
                 instancesView.setText("\nUnable to render instances.");
                 setStatus(errorText(e));
@@ -1301,7 +1490,7 @@ public class MainActivity extends Activity {
             card.setOnClickListener(v -> {
                 selectedInstanceKey = getInstanceKey(item);
                 setInstanceDetail(item);
-                renderInstanceCards(instances);
+                showInstanceDetailView();
             });
 
             card.addView(title);
