@@ -5,6 +5,7 @@ let state = {
   instances: [],
   clients: [],
   operations: [],
+  operationsPreview: [],
   ignoredRemotes: [],
   remoteTests: {},
   instanceSort: { key: 'remote', dir: 'asc' },
@@ -313,6 +314,46 @@ async function loadAudit() {
 }
 
 
+
+function renderOperationsPreview() {
+  const el = $('operationsPreview');
+
+  if (!el) return;
+
+  if (!state.operationsPreview || state.operationsPreview.length === 0) {
+    el.innerHTML = '<span class="muted">No discovery preview available.</span>';
+    return;
+  }
+
+  el.innerHTML = `
+    <div class="operations-preview-grid">
+      ${state.operationsPreview.map((entry) => {
+        const operations = entry.operations || [];
+        const names = operations.map((op) => op.operation);
+
+        return `
+          <div class="operations-preview-card">
+            <div class="operations-preview-role">${escapeHtml(entry.role)}</div>
+            <div class="operations-preview-list">
+              ${
+                names.length
+                  ? names.map((name) => bubble(name, 'remote')).join(' ')
+                  : '<span class="muted">none</span>'
+              }
+            </div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
+async function loadOperationsPreview() {
+  const data = await fetchJson('/api/admin/operations-preview');
+  state.operationsPreview = data.preview || [];
+  renderOperationsPreview();
+}
+
 function renderOperations() {
   const body = $('operationsBody');
 
@@ -381,6 +422,7 @@ async function setOperationEnabled(operationKey, enabled) {
     });
 
     await loadOperations();
+    await loadOperationsPreview();
     await loadAudit();
   } catch (err) {
     alert(err.message);
@@ -396,6 +438,7 @@ async function changeOperationRole(operationKey, roleRequired) {
     });
 
     await loadOperations();
+    await loadOperationsPreview();
     await loadAudit();
   } catch (err) {
     alert(err.message);
@@ -599,13 +642,14 @@ async function revokeClient(id) {
 
 async function loadData() {
   try {
-    const [health, summaryData, remotesData, instancesData, clientsData, operationsData] = await Promise.all([
+    const [health, summaryData, remotesData, instancesData, clientsData, operationsData, operationsPreviewData] = await Promise.all([
       fetchJson('/api/mobile/health'),
       fetchJson('/api/mobile/summary'),
       fetchJson('/api/admin/remotes'),
       fetchJson('/api/mobile/instances'),
       fetchJson('/api/admin/clients'),
-      fetchJson('/api/admin/operations')
+      fetchJson('/api/admin/operations'),
+      fetchJson('/api/admin/operations-preview')
     ]);
 
     state.health = health;
@@ -615,6 +659,7 @@ async function loadData() {
     state.instances = instancesData.instances || [];
     state.clients = clientsData.clients || [];
     state.operations = operationsData.operations || [];
+    state.operationsPreview = operationsPreviewData.preview || [];
 
     renderStatus();
     renderSummary();
@@ -622,6 +667,7 @@ async function loadData() {
     renderRemoteFilter();
     renderClients();
     renderOperations();
+    renderOperationsPreview();
     renderInstances();
     await loadAudit();
   } catch (err) {

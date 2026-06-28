@@ -1285,3 +1285,40 @@ body.light-theme .remote-add-grid label span {
   cursor: wait;
 }
 
+
+.operations-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 0.5rem 0 0.85rem;
+}
+
+.operations-preview-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 2.4rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 0.65rem;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.operations-preview-role {
+  min-width: 5.5rem;
+  font-weight: 700;
+  text-transform: lowercase;
+}
+
+.operations-preview-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+@media (max-width: 900px) {
+  .operations-preview-grid {
+    grid-template-columns: 1fr;
+  }
+}

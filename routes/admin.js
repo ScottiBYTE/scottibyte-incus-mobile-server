@@ -4,6 +4,7 @@ const { db } = require('../db');
 const { getRemoteInventory, addRemoteViaSsh, removeRemote, testRemote } = require('../incus');
 const { logAuditEvent, listAuditEvents, getAdminActor } = require('../audit');
 const {
+  listOperationDefinitionsForRole,
   listAllOperationDefinitions,
   setOperationEnabled,
   setOperationRole
