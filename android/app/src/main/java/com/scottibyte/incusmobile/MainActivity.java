@@ -6,6 +6,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.content.SharedPreferences;
 import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.Gravity;
@@ -34,7 +35,7 @@ import java.util.Map;
 
 public class MainActivity extends Activity {
     private static final String API_BASE_URL = "https://incusmobile.scottibyte.com";
-    private static final String APP_VERSION = "0.2.1";
+    private static final String APP_VERSION = "0.3.0";
     private static final String PREFS_NAME = "scottibyte_incus_mobile";
     private static final String PREF_DEVICE_ID = "device_id";
     private static final String PREF_BEARER_TOKEN = "bearer_token";
@@ -52,6 +53,7 @@ public class MainActivity extends Activity {
     private Button resetButton;
     private TextView dashboardView;
     private TextView remoteSummaryView;
+    private LinearLayout serverCardsContainer;
     private TextView selectedServerView;
     private TextView instancesView;
     private TextView instanceDetailView;
@@ -131,6 +133,9 @@ public class MainActivity extends Activity {
         remoteSummaryView.setTextSize(14);
         remoteSummaryView.setText("\nServers\nTap View Instances to load server summary.");
 
+        serverCardsContainer = new LinearLayout(this);
+        serverCardsContainer.setOrientation(LinearLayout.VERTICAL);
+
         selectedServerView = new TextView(this);
         selectedServerView.setTextSize(14);
         selectedServerView.setText("\nSelected Server\nNo server selected.");
@@ -200,6 +205,7 @@ public class MainActivity extends Activity {
         layout.addView(tokenView);
         layout.addView(dashboardView);
         layout.addView(remoteSummaryView);
+        layout.addView(serverCardsContainer);
         layout.addView(selectedServerView);
         layout.addView(serverFilterInput);
         layout.addView(instanceFilterInput);
@@ -311,6 +317,9 @@ public class MainActivity extends Activity {
         serverFilterInput.setText("");
         instanceFilterInput.setText("");
         remoteSummaryView.setText("\nServers\nTap View Instances to load server summary.");
+        if (serverCardsContainer != null) {
+            serverCardsContainer.removeAllViews();
+        }
         selectedServerView.setText("\nSelected Server\nNo server selected.");
         instancesView.setText("\nInstances: not loaded");
         instanceDetailView.setText("\nSelected Instance\nNo instance selected.");
@@ -674,11 +683,65 @@ public class MainActivity extends Activity {
                     out.append("\n");
                 }
 
-                remoteSummaryView.setText(out.toString());
+                remoteSummaryView.setText("\nServers");
+                renderServerCards(remotes, counts);
             } catch (Exception e) {
                 remoteSummaryView.setText("\nServers\nUnable to render server summary.");
             }
         });
+    }
+
+    private void renderServerCards(ArrayList<String> remotes, Map<String, int[]> counts) {
+        if (serverCardsContainer == null) {
+            return;
+        }
+
+        serverCardsContainer.removeAllViews();
+
+        for (String remote : remotes) {
+            int[] row = counts.get(remote);
+            if (row == null) {
+                continue;
+            }
+
+            LinearLayout card = new LinearLayout(this);
+            card.setOrientation(LinearLayout.VERTICAL);
+            card.setPadding(28, 22, 28, 22);
+
+            LinearLayout.LayoutParams cardParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            );
+            cardParams.setMargins(0, 10, 0, 10);
+            card.setLayoutParams(cardParams);
+
+            GradientDrawable background = new GradientDrawable();
+            background.setCornerRadius(24);
+            background.setStroke(2, 0xFF3A4A66);
+            background.setColor(0xFF111827);
+            card.setBackground(background);
+
+            TextView title = new TextView(this);
+            title.setText(remote);
+            title.setTextSize(18);
+            title.setTypeface(Typeface.DEFAULT_BOLD);
+            title.setTextColor(0xFFFFFFFF);
+
+            TextView countsView = new TextView(this);
+            countsView.setText(
+                row[0] + " instances\n" +
+                row[1] + " running / " +
+                row[2] + " stopped / " +
+                row[3] + " errors"
+            );
+            countsView.setTextSize(14);
+            countsView.setTextColor(0xFFD1D5DB);
+
+            card.addView(title);
+            card.addView(countsView);
+
+            serverCardsContainer.addView(card);
+        }
     }
 
     private void renderSelectedServerSummary(String serverFilter) {
