@@ -35,7 +35,7 @@ import java.util.Map;
 
 public class MainActivity extends Activity {
     private static final String API_BASE_URL = "https://incusmobile.scottibyte.com";
-    private static final String APP_VERSION = "0.3.9";
+    private static final String APP_VERSION = "0.3.10";
     private static final String PREFS_NAME = "scottibyte_incus_mobile";
     private static final String PREF_DEVICE_ID = "device_id";
     private static final String PREF_BEARER_TOKEN = "bearer_token";
@@ -59,6 +59,9 @@ public class MainActivity extends Activity {
     private LinearLayout fixedHeaderLayout;
     private TextView brandTitleView;
     private TextView headerStatsView;
+    private Button headerDetailsButton;
+    private TextView headerDetailsView;
+    private boolean headerDetailsVisible = false;
     private ScrollView mainScrollView;
     private LinearLayout serverCardsContainer;
     private TextView selectedServerView;
@@ -109,8 +112,23 @@ public class MainActivity extends Activity {
         headerStatsView.setTextColor(0xFFD1D5DB);
         headerStatsView.setGravity(Gravity.CENTER_HORIZONTAL);
 
+        headerDetailsButton = new Button(this);
+        headerDetailsButton.setText("Connection details ▸");
+        headerDetailsButton.setOnClickListener(v -> {
+            headerDetailsVisible = !headerDetailsVisible;
+            updateHeaderDetailsView();
+        });
+
+        headerDetailsView = new TextView(this);
+        headerDetailsView.setTextSize(13);
+        headerDetailsView.setTextColor(0xFFD1D5DB);
+        headerDetailsView.setGravity(Gravity.CENTER_HORIZONTAL);
+        headerDetailsView.setVisibility(View.GONE);
+
         fixedHeaderLayout.addView(brandTitleView);
         fixedHeaderLayout.addView(headerStatsView);
+        fixedHeaderLayout.addView(headerDetailsButton);
+        fixedHeaderLayout.addView(headerDetailsView);
 
         ScrollView scroll = new ScrollView(this);
         mainScrollView = scroll;
@@ -320,6 +338,7 @@ public class MainActivity extends Activity {
         setContentView(rootLayout);
 
         refreshTokenStatus();
+        updateHeaderDetailsView();
         updateAuthUiVisibility();
         showServerListView();
 
@@ -935,6 +954,26 @@ public class MainActivity extends Activity {
         });
     }
 
+    private void updateHeaderDetailsView() {
+        if (headerDetailsButton == null || headerDetailsView == null) {
+            return;
+        }
+
+        if (!headerDetailsVisible) {
+            headerDetailsButton.setText("Connection details ▸");
+            headerDetailsView.setVisibility(View.GONE);
+            return;
+        }
+
+        headerDetailsButton.setText("Connection details ▾");
+        headerDetailsView.setText(
+            "Connected to:\n" + API_BASE_URL +
+            "\n\nClient:\n" + getDeviceName() +
+            "\n\nVersion:\n" + APP_VERSION
+        );
+        headerDetailsView.setVisibility(View.VISIBLE);
+    }
+
     private void renderHeaderStats() {
         if (headerStatsView == null) {
             return;
@@ -986,7 +1025,7 @@ public class MainActivity extends Activity {
                 reachableServers.size() + " reachable\n" +
                 running + " running / " +
                 stopped + " stopped" +
-                (errors > 0 ? " / " + errors + " errors" : "")
+                (errors > 0 ? " / " + errors + " inventory errors" : "")
             );
         } catch (Exception e) {
             headerStatsView.setText("Unable to render summary.");
@@ -1065,7 +1104,7 @@ public class MainActivity extends Activity {
                     if (row[3] > 0) {
                         out.append(" / ")
                            .append(row[3])
-                           .append(" errors");
+                           .append(" inventory errors");
                     }
 
                     out.append("\n");
@@ -1127,7 +1166,7 @@ public class MainActivity extends Activity {
                 row[0] + " instances\n" +
                 row[1] + " running / " +
                 row[2] + " stopped / " +
-                row[3] + " errors"
+                row[3] + " inventory errors"
             );
             countsView.setTextSize(14);
             countsView.setTextColor(0xFFD1D5DB);
@@ -1270,7 +1309,7 @@ public class MainActivity extends Activity {
                .append(" stopped");
 
             if (errors > 0) {
-                out.append(" / ").append(errors).append(" errors");
+                out.append(" / ").append(errors).append(" inventory errors");
             }
 
             selectedServerView.setText(out.toString());
