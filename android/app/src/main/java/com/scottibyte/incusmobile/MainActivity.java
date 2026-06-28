@@ -29,7 +29,7 @@ import java.util.UUID;
 
 public class MainActivity extends Activity {
     private static final String API_BASE_URL = "https://incusmobile.scottibyte.com";
-    private static final String APP_VERSION = "0.1.6";
+    private static final String APP_VERSION = "0.1.7";
     private static final String PREFS_NAME = "scottibyte_incus_mobile";
     private static final String PREF_DEVICE_ID = "device_id";
     private static final String PREF_BEARER_TOKEN = "bearer_token";
@@ -41,6 +41,7 @@ public class MainActivity extends Activity {
     private TextView tokenView;
     private TextView dashboardView;
     private TextView instancesView;
+    private TextView instanceDetailView;
     private EditText instanceFilterInput;
     private JSONArray lastInstances = null;
     private EditText deviceNameInput;
@@ -130,9 +131,16 @@ public class MainActivity extends Activity {
 
             @Override
             public void afterTextChanged(Editable value) {
-                renderInstancesList();
+                if (instancesView != null && instanceDetailView != null && lastInstances != null) {
+                    renderInstancesList();
+                }
             }
         });
+
+        instanceDetailView = new TextView(this);
+        instanceDetailView.setTextSize(14);
+        instanceDetailView.setTypeface(Typeface.DEFAULT_BOLD);
+        instanceDetailView.setText("\nSelected Instance\nNo instance selected.");
 
         statusView = new TextView(this);
         statusView.setText("\nStatus: Ready");
@@ -152,6 +160,7 @@ public class MainActivity extends Activity {
         layout.addView(dashboardView);
         layout.addView(instanceFilterInput);
         layout.addView(instancesView);
+        layout.addView(instanceDetailView);
         layout.addView(statusView);
 
         scroll.addView(layout);
@@ -227,6 +236,7 @@ public class MainActivity extends Activity {
         lastInstances = null;
         instanceFilterInput.setText("");
         instancesView.setText("\nInstances: not loaded");
+        instanceDetailView.setText("\nSelected Instance\nNo instance selected.");
         setStatus("Local token removed. Server approval was not changed.");
     }
 
@@ -511,6 +521,10 @@ public class MainActivity extends Activity {
     private void renderInstancesList() {
         new Handler(Looper.getMainLooper()).post(() -> {
             try {
+                if (instancesView == null || instanceDetailView == null) {
+                    return;
+                }
+
                 if (lastInstances == null || lastInstances.length() == 0) {
                     instancesView.setText("\nInstances\nNo instances returned.");
                     return;
@@ -524,6 +538,7 @@ public class MainActivity extends Activity {
                 int matched = 0;
                 int shown = 0;
                 int maxShown = 50;
+                JSONObject firstMatch = null;
 
                 out.append("\nInstances");
 
@@ -553,6 +568,10 @@ public class MainActivity extends Activity {
 
                     matched++;
 
+                    if (firstMatch == null) {
+                        firstMatch = item;
+                    }
+
                     if (shown >= maxShown) {
                         continue;
                     }
@@ -581,6 +600,7 @@ public class MainActivity extends Activity {
 
                 if (matched == 0) {
                     out.append("\nNo matching instances.");
+                    setInstanceDetail(null);
                 } else {
                     out.append("\nShowing ")
                        .append(shown)
@@ -595,11 +615,76 @@ public class MainActivity extends Activity {
                 }
 
                 instancesView.setText(out.toString());
+                setInstanceDetail(firstMatch);
             } catch (Exception e) {
                 instancesView.setText("\nUnable to render instances.");
                 setStatus(errorText(e));
             }
         });
+    }
+
+    private void setInstanceDetail(JSONObject item) {
+        if (instanceDetailView == null) {
+            return;
+        }
+
+        try {
+            if (item == null) {
+                instanceDetailView.setText("\nSelected Instance\nNo instance selected.");
+                return;
+            }
+
+            if (item.optBoolean("error")) {
+                String remote = item.optString("remote", "unknown");
+                String error = item.optString("error", "unknown error");
+
+                instanceDetailView.setText(
+                    "\nSelected Instance\n" +
+                    remote + ": ERROR\n" +
+                    "Error: " + error
+                );
+                return;
+            }
+
+            String remote = item.optString("remote", "");
+            String project = item.optString("project", "");
+            String name = item.optString("name", item.optString("instance", item.optString("id", "")));
+            String type = item.optString("type", "");
+            String status = item.optString("status", "");
+            String architecture = item.optString("architecture", "");
+            String location = item.optString("location", "");
+            String createdAt = item.optString("created_at", "");
+            String lastUsedAt = item.optString("last_used_at", "");
+
+            StringBuilder detail = new StringBuilder();
+            detail.append("\nSelected Instance\n");
+
+            if (!remote.isEmpty() || !name.isEmpty()) {
+                detail.append(remote).append(":").append(name).append("\n");
+            }
+
+            appendDetailLine(detail, "Remote", remote);
+            appendDetailLine(detail, "Project", project);
+            appendDetailLine(detail, "Name", name);
+            appendDetailLine(detail, "Type", type);
+            appendDetailLine(detail, "Status", status);
+            appendDetailLine(detail, "Architecture", architecture);
+            appendDetailLine(detail, "Location", location);
+            appendDetailLine(detail, "Created", createdAt);
+            appendDetailLine(detail, "Last Used", lastUsedAt);
+
+            instanceDetailView.setText(detail.toString());
+        } catch (Exception e) {
+            instanceDetailView.setText("\nSelected Instance\nUnable to render instance detail.");
+        }
+    }
+
+    private void appendDetailLine(StringBuilder builder, String label, String value) {
+        if (value == null || value.trim().isEmpty() || "null".equalsIgnoreCase(value.trim())) {
+            return;
+        }
+
+        builder.append(label).append(": ").append(value).append("\n");
     }
 
     private HttpResult httpRequest(String method, String path, String jsonBody, String bearerToken) throws Exception {
