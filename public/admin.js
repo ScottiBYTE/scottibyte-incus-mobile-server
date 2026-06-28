@@ -278,7 +278,15 @@ function renderAudit(events) {
 
   body.innerHTML = events.map((event) => {
     const actor = event.actor_name || event.actor_type || '-';
-    const target = event.target_id || event.target_type || '-';
+    const meta = event.metadata || {};
+    const target =
+      meta.new_display_name ||
+      meta.display_name ||
+      meta.device_name ||
+      meta.device_id ||
+      event.target_id ||
+      event.target_type ||
+      '-';
     const resultType = event.result === 'success'
       ? 'good'
       : event.result === 'failed'
