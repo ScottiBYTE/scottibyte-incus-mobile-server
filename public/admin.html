@@ -152,6 +152,32 @@
     <section class="panel">
       <div class="panel-heading">
         <div>
+          <h2>Recent Activity</h2>
+          <p>Administrative and operational audit events.</p>
+        </div>
+        <button id="refreshAuditBtn" class="btn small-btn">Refresh Activity</button>
+      </div>
+
+      <div class="table-wrap small-table">
+        <table id="auditTable">
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Actor</th>
+              <th>Event</th>
+              <th>Target</th>
+              <th>Result</th>
+              <th>Message</th>
+            </tr>
+          </thead>
+          <tbody id="auditBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-heading">
+        <div>
           <h2>Instance Summary</h2>
           <p>At-a-glance inventory across configured Incus remotes.</p>
         </div>

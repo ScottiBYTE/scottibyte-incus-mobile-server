@@ -2,8 +2,26 @@ const express = require('express');
 const crypto = require('crypto');
 const { db } = require('../db');
 const { getRemoteInventory, addRemoteViaSsh, removeRemote, testRemote } = require('../incus');
+const { logAuditEvent, listAuditEvents, getAdminActor } = require('../audit');
 
 const router = express.Router();
+
+router.get('/audit-events', (req, res) => {
+  try {
+    const limit = Number(req.query.limit || 50);
+
+    res.json({
+      ok: true,
+      events: listAuditEvents(limit)
+    });
+  } catch (err) {
+    res.status(500).json({
+      ok: false,
+      error: err.message
+    });
+  }
+});
+
 
 function nowIso() {
   return new Date().toISOString();
@@ -217,11 +235,32 @@ router.post('/remotes', async (req, res) => {
       trust_name: req.body.trust_name
     });
 
+    logAuditEvent({
+      ...getAdminActor(req),
+      event_type: 'remote.add',
+      target_type: 'remote',
+      target_id: result.name,
+      result: 'success',
+      message: `Added remote ${result.name}`,
+      metadata: {
+        addr: result.addr
+      }
+    });
+
     res.json({
       ok: true,
       remote: result
     });
   } catch (err) {
+    logAuditEvent({
+      ...getAdminActor(req),
+      event_type: 'remote.add',
+      target_type: 'remote',
+      target_id: req.body?.name || null,
+      result: 'failed',
+      message: err.message
+    });
+
     res.status(400).json({
       ok: false,
       error: err.message
@@ -230,12 +269,40 @@ router.post('/remotes', async (req, res) => {
 });
 
 router.post('/remotes/:name/test', async (req, res) => {
-  const result = await testRemote(req.params.name);
+  try {
+    const result = await testRemote(req.params.name);
 
-  res.status(result.ok ? 200 : 502).json({
-    ok: result.ok,
-    test: result
-  });
+    logAuditEvent({
+      ...getAdminActor(req),
+      event_type: 'remote.test',
+      target_type: 'remote',
+      target_id: req.params.name,
+      result: result.ok ? 'success' : 'failed',
+      message: result.ok
+        ? `Remote ${req.params.name} is reachable`
+        : `Remote ${req.params.name} test failed`,
+      metadata: result
+    });
+
+    res.status(result.ok ? 200 : 502).json({
+      ok: result.ok,
+      test: result
+    });
+  } catch (err) {
+    logAuditEvent({
+      ...getAdminActor(req),
+      event_type: 'remote.test',
+      target_type: 'remote',
+      target_id: req.params.name,
+      result: 'failed',
+      message: err.message
+    });
+
+    res.status(400).json({
+      ok: false,
+      error: err.message
+    });
+  }
 });
 
 router.delete('/remotes/:name', async (req, res) => {
@@ -250,6 +317,15 @@ router.delete('/remotes/:name', async (req, res) => {
     }
 
     const result = await removeRemote(name);
+
+    logAuditEvent({
+      ...getAdminActor(req),
+      event_type: 'remote.delete',
+      target_type: 'remote',
+      target_id: name,
+      result: 'success',
+      message: `Deleted remote ${name}`
+    });
 
     res.json({
       ok: true,

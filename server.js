@@ -20,6 +20,7 @@ const {
   requireAdminAuth
 } = require('./adminAuth');
 const { BetterSqliteSessionStore } = require('./sessionStore');
+const { ensureAuditTable } = require('./audit');
 
 const app = express();
 const PORT = Number(process.env.PORT || 3088);
@@ -35,6 +36,7 @@ app.use(express.json({ limit: '1mb' }));
 
 initDb();
 ensureAdminAuthTables();
+ensureAuditTable();
 
 const sessionHours = getSessionHours();
 

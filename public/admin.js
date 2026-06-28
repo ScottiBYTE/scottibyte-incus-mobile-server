@@ -261,6 +261,48 @@ function renderInstances() {
   reapplyTableSelection('instancesTable');
 }
 
+
+function renderAudit(events) {
+  const body = $('auditBody');
+
+  if (!body) return;
+
+  if (!events || events.length === 0) {
+    body.innerHTML = `
+      <tr>
+        <td colspan="6" class="muted">No audit events yet.</td>
+      </tr>
+    `;
+    return;
+  }
+
+  body.innerHTML = events.map((event) => {
+    const actor = event.actor_name || event.actor_type || '-';
+    const target = event.target_id || event.target_type || '-';
+    const resultType = event.result === 'success'
+      ? 'good'
+      : event.result === 'failed'
+        ? 'bad'
+        : 'neutral';
+
+    return `
+      <tr>
+        <td>${escapeHtml(event.created_at || '-')}</td>
+        <td>${bubble(actor, 'remote')}</td>
+        <td>${escapeHtml(event.event_type || '-')}</td>
+        <td>${escapeHtml(target)}</td>
+        <td>${bubble(event.result || '-', resultType)}</td>
+        <td>${escapeHtml(event.message || '-')}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+async function loadAudit() {
+  const data = await fetchJson('/api/admin/audit-events?limit=25');
+  renderAudit(data.events || []);
+}
+
 function renderClients() {
   const rows = sortRows(state.clients, state.clientSort);
 
@@ -388,12 +430,12 @@ async function testRemote(name) {
 
     state.remoteTests[name] = data.test;
     renderRemotes();
+
+    if (typeof loadAudit === 'function') {
+      await loadAudit();
+    }
   } catch (err) {
-    state.remoteTests[name] = {
-      reachable: false,
-      error: err.message
-    };
-    renderRemotes();
+    alert(err.message);
   }
 }
 
@@ -640,6 +682,7 @@ function init() {
   $('themeToggleBtn').addEventListener('click', toggleTheme);
   $('logoutBtn').addEventListener('click', logoutAdmin);
   $('refreshRemotesBtn').addEventListener('click', refreshRemotesOnly);
+  $('refreshAuditBtn').addEventListener('click', loadAudit);
 
   ['searchInput', 'remoteFilter', 'statusFilter', 'typeFilter'].forEach((id) => {
     $(id).addEventListener('input', renderInstances);
