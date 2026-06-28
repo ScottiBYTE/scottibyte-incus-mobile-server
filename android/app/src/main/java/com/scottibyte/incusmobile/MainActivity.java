@@ -35,7 +35,7 @@ import java.util.Map;
 
 public class MainActivity extends Activity {
     private static final String API_BASE_URL = "https://incusmobile.scottibyte.com";
-    private static final String APP_VERSION = "0.3.6";
+    private static final String APP_VERSION = "0.3.7";
     private static final String PREFS_NAME = "scottibyte_incus_mobile";
     private static final String PREF_DEVICE_ID = "device_id";
     private static final String PREF_BEARER_TOKEN = "bearer_token";
@@ -124,6 +124,7 @@ public class MainActivity extends Activity {
         instancesButton = new Button(this);
         instancesButton.setText("Load / Refresh");
         instancesButton.setOnClickListener(v -> loadInstances());
+        instancesButton.setVisibility(View.GONE);
 
         backToServersButton = new Button(this);
         backToServersButton.setText("Back to Servers");
@@ -132,6 +133,7 @@ public class MainActivity extends Activity {
         resetButton = new Button(this);
         resetButton.setText("Reset Pairing");
         resetButton.setOnClickListener(v -> resetLocalToken());
+        resetButton.setVisibility(View.GONE);
 
         tokenView = new TextView(this);
         tokenView.setTextSize(14);
@@ -262,7 +264,7 @@ public class MainActivity extends Activity {
         showServerListView();
 
         if (hasBearerToken()) {
-            loadAuthorizedHome();
+            loadInstances();
         }
     }
 
@@ -347,7 +349,7 @@ public class MainActivity extends Activity {
         }
 
         if (instanceFilterInput != null) {
-            instanceFilterInput.setVisibility(View.VISIBLE);
+            instanceFilterInput.setVisibility(View.GONE);
         }
 
         if (remoteSummaryView != null) {
@@ -389,11 +391,11 @@ public class MainActivity extends Activity {
         }
 
         if (instancesButton != null) {
-            instancesButton.setVisibility(authorized ? View.VISIBLE : View.GONE);
+            instancesButton.setVisibility(View.GONE);
         }
 
         if (resetButton != null) {
-            resetButton.setVisibility(View.VISIBLE);
+            resetButton.setVisibility(View.GONE);
         }
 
         if (healthButton != null) {
@@ -444,7 +446,7 @@ public class MainActivity extends Activity {
 
         refreshTokenStatus();
         updateAuthUiVisibility();
-        loadAuthorizedHome();
+        loadInstances();
     }
 
     private void refreshTokenStatus() {
