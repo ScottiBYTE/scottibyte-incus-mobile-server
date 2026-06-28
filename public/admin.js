@@ -570,8 +570,8 @@ function renderClients() {
         <div class="actions">
           <button class="btn" onclick="renameClient(${c.id}, '${escapeHtml(c.display_name || c.device_name || '')}')">Rename</button>
           ${c.status === 'pending' ? `
-            <button class="btn" onclick="approveClient(${c.id}, 'viewer')">Viewer</button>
-            <button class="btn primary" onclick="approveClient(${c.id}, 'operator')">Operator</button>
+            <button class="btn" onclick="approveClient(${c.id}, 'viewer')">Approve Viewer</button>
+            <button class="btn primary" onclick="approveClient(${c.id}, 'operator')">Approve Operator</button>
           ` : ''}
           ${c.status === 'approved' ? `
             <button class="btn danger" onclick="revokeClient(${c.id})">Revoke</button>

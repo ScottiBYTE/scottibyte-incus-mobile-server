@@ -4,6 +4,7 @@
     <application
         android:theme="@style/AppTheme"
         android:label="ScottiBYTE Incus Mobile"
+        android:icon="@drawable/app_icon"
         android:allowBackup="false"
         android:supportsRtl="true">
         <activity
