@@ -6,6 +6,8 @@ import android.os.Handler;
 import android.os.Looper;
 import android.content.SharedPreferences;
 import android.graphics.Typeface;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.Gravity;
 import android.widget.Button;
 import android.widget.EditText;
@@ -27,7 +29,7 @@ import java.util.UUID;
 
 public class MainActivity extends Activity {
     private static final String API_BASE_URL = "https://incusmobile.scottibyte.com";
-    private static final String APP_VERSION = "0.1.5";
+    private static final String APP_VERSION = "0.1.6";
     private static final String PREFS_NAME = "scottibyte_incus_mobile";
     private static final String PREF_DEVICE_ID = "device_id";
     private static final String PREF_BEARER_TOKEN = "bearer_token";
@@ -39,6 +41,8 @@ public class MainActivity extends Activity {
     private TextView tokenView;
     private TextView dashboardView;
     private TextView instancesView;
+    private EditText instanceFilterInput;
+    private JSONArray lastInstances = null;
     private EditText deviceNameInput;
     private final Handler pairingHandler = new Handler(Looper.getMainLooper());
     private boolean pairingPollingActive = false;
@@ -112,6 +116,24 @@ public class MainActivity extends Activity {
         instancesView.setTextSize(14);
         instancesView.setText("\nInstances: not loaded");
 
+        instanceFilterInput = new EditText(this);
+        instanceFilterInput.setHint("Filter instances");
+        instanceFilterInput.setSingleLine(true);
+        instanceFilterInput.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence value, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence value, int start, int before, int count) {
+            }
+
+            @Override
+            public void afterTextChanged(Editable value) {
+                renderInstancesList();
+            }
+        });
+
         statusView = new TextView(this);
         statusView.setText("\nStatus: Ready");
         statusView.setTextSize(16);
@@ -128,6 +150,7 @@ public class MainActivity extends Activity {
         layout.addView(resetButton);
         layout.addView(tokenView);
         layout.addView(dashboardView);
+        layout.addView(instanceFilterInput);
         layout.addView(instancesView);
         layout.addView(statusView);
 
@@ -201,6 +224,8 @@ public class MainActivity extends Activity {
         prefs.edit().remove(PREF_BEARER_TOKEN).apply();
         refreshTokenStatus();
         dashboardView.setText("\nNot paired yet.");
+        lastInstances = null;
+        instanceFilterInput.setText("");
         instancesView.setText("\nInstances: not loaded");
         setStatus("Local token removed. Server approval was not changed.");
     }
@@ -479,39 +504,69 @@ public class MainActivity extends Activity {
     }
 
     private void setInstancesFromResponse(JSONObject json) {
+        lastInstances = json.optJSONArray("instances");
+        renderInstancesList();
+    }
+
+    private void renderInstancesList() {
         new Handler(Looper.getMainLooper()).post(() -> {
             try {
-                JSONArray instances = json.optJSONArray("instances");
-
-                if (instances == null || instances.length() == 0) {
+                if (lastInstances == null || lastInstances.length() == 0) {
                     instancesView.setText("\nInstances\nNo instances returned.");
                     return;
                 }
 
+                String filter = instanceFilterInput != null
+                    ? instanceFilterInput.getText().toString().trim().toLowerCase()
+                    : "";
+
                 StringBuilder out = new StringBuilder();
-                out.append("\nInstances\n");
+                int matched = 0;
+                int shown = 0;
+                int maxShown = 50;
 
-                int shown = Math.min(instances.length(), 50);
+                out.append("\nInstances");
 
-                for (int i = 0; i < shown; i++) {
-                    JSONObject item = instances.optJSONObject(i);
+                if (!filter.isEmpty()) {
+                    out.append(" matching ").append('"').append(filter).append('"');
+                }
+
+                out.append("\n");
+
+                for (int i = 0; i < lastInstances.length(); i++) {
+                    JSONObject item = lastInstances.optJSONObject(i);
                     if (item == null) {
                         continue;
                     }
 
-                    if (item.optBoolean("error")) {
-                        out.append("\n")
-                           .append(item.optString("remote", "unknown"))
-                           .append(": ERROR - ")
-                           .append(item.optString("error", "unknown error"))
-                           .append("\n");
+                    String remote = item.optString("remote", "");
+                    String name = item.optString("name", item.optString("instance", item.optString("id", "")));
+                    String type = item.optString("type", "");
+                    String status = item.optString("status", "");
+                    String error = item.optString("error", "");
+
+                    String searchable = (remote + " " + name + " " + type + " " + status + " " + error).toLowerCase();
+
+                    if (!filter.isEmpty() && !searchable.contains(filter)) {
                         continue;
                     }
 
-                    String remote = item.optString("remote", "");
-                    String name = item.optString("name", item.optString("instance", ""));
-                    String type = item.optString("type", "");
-                    String status = item.optString("status", "");
+                    matched++;
+
+                    if (shown >= maxShown) {
+                        continue;
+                    }
+
+                    shown++;
+
+                    if (item.optBoolean("error")) {
+                        out.append("\n")
+                           .append(remote.isEmpty() ? "unknown" : remote)
+                           .append(": ERROR - ")
+                           .append(error.isEmpty() ? "unknown error" : error)
+                           .append("\n");
+                        continue;
+                    }
 
                     out.append("\n")
                        .append(remote)
@@ -524,12 +579,19 @@ public class MainActivity extends Activity {
                        .append("\n");
                 }
 
-                if (instances.length() > shown) {
-                    out.append("\nShowing first ")
+                if (matched == 0) {
+                    out.append("\nNo matching instances.");
+                } else {
+                    out.append("\nShowing ")
                        .append(shown)
                        .append(" of ")
-                       .append(instances.length())
-                       .append(" instances.");
+                       .append(matched)
+                       .append(" matching instances.");
+
+                    if (lastInstances.length() != matched) {
+                        out.append("\nTotal loaded: ")
+                           .append(lastInstances.length());
+                    }
                 }
 
                 instancesView.setText(out.toString());
