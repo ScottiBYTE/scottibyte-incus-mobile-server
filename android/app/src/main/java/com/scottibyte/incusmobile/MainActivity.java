@@ -14,6 +14,7 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 
 import org.json.JSONObject;
+import org.json.JSONArray;
 
 import java.io.BufferedReader;
 import java.io.OutputStream;
@@ -26,7 +27,7 @@ import java.util.UUID;
 
 public class MainActivity extends Activity {
     private static final String API_BASE_URL = "https://incusmobile.scottibyte.com";
-    private static final String APP_VERSION = "0.1.4";
+    private static final String APP_VERSION = "0.1.5";
     private static final String PREFS_NAME = "scottibyte_incus_mobile";
     private static final String PREF_DEVICE_ID = "device_id";
     private static final String PREF_BEARER_TOKEN = "bearer_token";
@@ -37,6 +38,7 @@ public class MainActivity extends Activity {
     private TextView deviceIdView;
     private TextView tokenView;
     private TextView dashboardView;
+    private TextView instancesView;
     private EditText deviceNameInput;
     private final Handler pairingHandler = new Handler(Looper.getMainLooper());
     private boolean pairingPollingActive = false;
@@ -87,8 +89,12 @@ public class MainActivity extends Activity {
         checkApprovalButton.setOnClickListener(v -> checkPairingStatus());
 
         Button summaryButton = new Button(this);
-        summaryButton.setText("Refresh Summary");
+        summaryButton.setText("Refresh");
         summaryButton.setOnClickListener(v -> loadAuthorizedHome());
+
+        Button instancesButton = new Button(this);
+        instancesButton.setText("View Instances");
+        instancesButton.setOnClickListener(v -> loadInstances());
 
         Button resetButton = new Button(this);
         resetButton.setText("Reset Pairing");
@@ -102,6 +108,10 @@ public class MainActivity extends Activity {
         dashboardView.setTypeface(Typeface.DEFAULT_BOLD);
         dashboardView.setText("\nNot paired yet.");
 
+        instancesView = new TextView(this);
+        instancesView.setTextSize(14);
+        instancesView.setText("\nInstances: not loaded");
+
         statusView = new TextView(this);
         statusView.setText("\nStatus: Ready");
         statusView.setTextSize(16);
@@ -114,9 +124,11 @@ public class MainActivity extends Activity {
         layout.addView(requestPairingButton);
         layout.addView(checkApprovalButton);
         layout.addView(summaryButton);
+        layout.addView(instancesButton);
         layout.addView(resetButton);
         layout.addView(tokenView);
         layout.addView(dashboardView);
+        layout.addView(instancesView);
         layout.addView(statusView);
 
         scroll.addView(layout);
@@ -189,6 +201,7 @@ public class MainActivity extends Activity {
         prefs.edit().remove(PREF_BEARER_TOKEN).apply();
         refreshTokenStatus();
         dashboardView.setText("\nNot paired yet.");
+        instancesView.setText("\nInstances: not loaded");
         setStatus("Local token removed. Server approval was not changed.");
     }
 
@@ -424,6 +437,104 @@ public class MainActivity extends Activity {
                 dashboardView.setText(dashboard);
             } catch (Exception e) {
                 dashboardView.setText("\nUnable to render summary.");
+                setStatus(errorText(e));
+            }
+        });
+    }
+
+
+    private void loadInstances() {
+        String token = getBearerToken();
+
+        if (token == null || token.trim().isEmpty()) {
+            setStatus("No bearer token stored. Request pairing and wait for admin approval.");
+            return;
+        }
+
+        setStatus("Loading instances...");
+
+        new Thread(() -> {
+            try {
+                HttpResult result = httpRequest(
+                    "GET",
+                    "/api/mobile/instances",
+                    null,
+                    token
+                );
+
+                if (result.code >= 200 && result.code < 300) {
+                    JSONObject json = new JSONObject(result.body);
+                    if (json.optBoolean("ok")) {
+                        setInstancesFromResponse(json);
+                        setStatus("Instances updated.");
+                        return;
+                    }
+                }
+
+                setStatus(result.toDisplayString());
+            } catch (Exception e) {
+                setStatus(errorText(e));
+            }
+        }).start();
+    }
+
+    private void setInstancesFromResponse(JSONObject json) {
+        new Handler(Looper.getMainLooper()).post(() -> {
+            try {
+                JSONArray instances = json.optJSONArray("instances");
+
+                if (instances == null || instances.length() == 0) {
+                    instancesView.setText("\nInstances\nNo instances returned.");
+                    return;
+                }
+
+                StringBuilder out = new StringBuilder();
+                out.append("\nInstances\n");
+
+                int shown = Math.min(instances.length(), 50);
+
+                for (int i = 0; i < shown; i++) {
+                    JSONObject item = instances.optJSONObject(i);
+                    if (item == null) {
+                        continue;
+                    }
+
+                    if (item.optBoolean("error")) {
+                        out.append("\n")
+                           .append(item.optString("remote", "unknown"))
+                           .append(": ERROR - ")
+                           .append(item.optString("error", "unknown error"))
+                           .append("\n");
+                        continue;
+                    }
+
+                    String remote = item.optString("remote", "");
+                    String name = item.optString("name", item.optString("instance", ""));
+                    String type = item.optString("type", "");
+                    String status = item.optString("status", "");
+
+                    out.append("\n")
+                       .append(remote)
+                       .append(":")
+                       .append(name)
+                       .append("\n  ")
+                       .append(status)
+                       .append(" / ")
+                       .append(type)
+                       .append("\n");
+                }
+
+                if (instances.length() > shown) {
+                    out.append("\nShowing first ")
+                       .append(shown)
+                       .append(" of ")
+                       .append(instances.length())
+                       .append(" instances.");
+                }
+
+                instancesView.setText(out.toString());
+            } catch (Exception e) {
+                instancesView.setText("\nUnable to render instances.");
                 setStatus(errorText(e));
             }
         });
