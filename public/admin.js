@@ -551,6 +551,55 @@ async function changeOperationRole(operationKey, roleRequired) {
   }
 }
 
+const APP_TIME_ZONE = 'America/Chicago';
+
+function formatLocalDateTime(value) {
+  if (!value || value === '-') {
+    return '-';
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: APP_TIME_ZONE,
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+    hour: 'numeric',
+    minute: '2-digit',
+    second: '2-digit',
+    timeZoneName: 'short'
+  }).format(date);
+}
+
+function clientTokenStatusText(c) {
+  if (c.status === 'pending') {
+    return 'Token: not issued';
+  }
+
+  if (c.status === 'approved' && c.token_claimed_at) {
+    return `Token: claimed ${formatLocalDateTime(c.token_claimed_at)}`;
+  }
+
+  if (c.status === 'approved') {
+    return 'Token: waiting for phone claim';
+  }
+
+  if (c.status === 'revoked' && c.token_claimed_at) {
+    return `Token: previously claimed ${formatLocalDateTime(c.token_claimed_at)}`;
+  }
+
+  if (c.status === 'revoked') {
+    return 'Token: revoked';
+  }
+
+  return 'Token: unknown';
+}
+
 function renderClients() {
   const rows = sortRows(state.clients, state.clientSort);
 
@@ -563,9 +612,12 @@ function renderClients() {
           ${c.display_name && c.device_name ? `<br>reported as: ${escapeHtml(c.device_name)}` : ''}
         </span>
       </td>
-      <td>${statusBubble(c.status)}</td>
+      <td>
+        ${statusBubble(c.status)}<br>
+        <span class="note">${escapeHtml(clientTokenStatusText(c))}</span>
+      </td>
       <td>${roleBubble(c.role)}</td>
-      <td>${escapeHtml(c.last_seen_at || '-')}</td>
+      <td>${escapeHtml(formatLocalDateTime(c.last_seen_at))}</td>
       <td>
         <div class="actions">
           <button class="btn" onclick="renameClient(${c.id}, '${escapeHtml(c.display_name || c.device_name || '')}')">Rename</button>
