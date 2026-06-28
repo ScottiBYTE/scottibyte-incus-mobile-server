@@ -238,6 +238,61 @@ router.post('/clients/:id/revoke', (req, res) => {
   });
 });
 
+
+router.post('/clients/:id/reset-pairing', (req, res) => {
+  const id = Number(req.params.id);
+
+  const client = db.prepare(`
+    SELECT id, device_id, device_name, display_name, status, role
+    FROM mobile_clients
+    WHERE id = ?
+  `).get(id);
+
+  if (!client) {
+    return res.status(404).json({
+      ok: false,
+      error: 'Client not found'
+    });
+  }
+
+  db.prepare(`
+    UPDATE mobile_clients
+    SET status = 'pending',
+        role = 'viewer',
+        token_hash = NULL,
+        token_once = NULL,
+        token_claimed_at = NULL,
+        approved_at = NULL,
+        revoked_at = NULL
+    WHERE id = ?
+  `).run(id);
+
+  logAuditEvent({
+    ...getAdminActor(req),
+    event_type: 'client.reset_pairing',
+    target_type: 'mobile_client',
+    target_id: String(id),
+    result: 'success',
+    message: `Reset mobile client ${client.display_name || client.device_name || client.device_id} to pending pairing`,
+    metadata: {
+      device_id: client.device_id,
+      device_name: client.device_name,
+      display_name: client.display_name,
+      previous_status: client.status,
+      previous_role: client.role
+    }
+  });
+
+  res.json({
+    ok: true,
+    id,
+    status: 'pending',
+    role: 'viewer',
+    message: 'Client reset to pending pairing approval.'
+  });
+});
+
+
 router.post('/clients/:id/role', (req, res) => {
   const id = Number(req.params.id);
   const requestedRole = String(req.body.role || '').trim();

@@ -570,11 +570,14 @@ function renderClients() {
         <div class="actions">
           <button class="btn" onclick="renameClient(${c.id}, '${escapeHtml(c.display_name || c.device_name || '')}')">Rename</button>
           ${c.status === 'pending' ? `
-            <button class="btn" onclick="approveClient(${c.id}, 'viewer')">Approve Viewer</button>
-            <button class="btn primary" onclick="approveClient(${c.id}, 'operator')">Approve Operator</button>
+            <button class="btn" onclick="approveClient(${c.id}, 'viewer', this)">Approve Viewer</button>
+            <button class="btn primary" onclick="approveClient(${c.id}, 'operator', this)">Approve Operator</button>
           ` : ''}
           ${c.status === 'approved' ? `
             <button class="btn danger" onclick="revokeClient(${c.id})">Revoke</button>
+          ` : ''}
+          ${c.status === 'revoked' ? `
+            <button class="btn" onclick="resetClientPairing(${c.id}, this)">Restore to Pending</button>
           ` : ''}
         </div>
       </td>
@@ -731,18 +734,57 @@ async function renameClient(id, currentName) {
   await loadData();
 }
 
-async function approveClient(id, role) {
-  await fetchJson(`/api/admin/clients/${id}/approve`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ role })
-  });
-  await loadData();
+async function approveClient(id, role, btn) {
+  const originalText = btn ? btn.textContent : '';
+
+  try {
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = role === 'operator' ? 'Approving Operator...' : 'Approving Viewer...';
+    }
+
+    await fetchJson(`/api/admin/clients/${id}/approve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role })
+    });
+
+    await refreshClientsOnly();
+    await loadAudit();
+  } catch (err) {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = originalText;
+    }
+    alert(err.message);
+  }
 }
 
 async function revokeClient(id) {
   await fetchJson(`/api/admin/clients/${id}/revoke`, { method: 'POST' });
   await loadData();
+}
+
+
+async function resetClientPairing(id, btn) {
+  const originalText = btn ? btn.textContent : '';
+
+  try {
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Restoring...';
+    }
+
+    await fetchJson(`/api/admin/clients/${id}/reset-pairing`, { method: 'POST' });
+    await refreshClientsOnly();
+    await loadAudit();
+  } catch (err) {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = originalText || 'Restore to Pending';
+    }
+    alert(err.message);
+  }
 }
 
 async function loadData() {
@@ -963,6 +1005,28 @@ async function logoutAdmin() {
   window.location.href = '/admin/login';
 }
 
+
+let mobileClientRefreshTimer = null;
+
+async function refreshClientsOnly() {
+  try {
+    const clientsData = await fetchJson('/api/admin/clients');
+    state.clients = clientsData.clients || [];
+    renderStatus();
+    renderClients();
+  } catch (err) {
+    console.warn('Mobile client refresh failed:', err.message || err);
+  }
+}
+
+function startMobileClientAutoRefresh() {
+  if (mobileClientRefreshTimer) {
+    return;
+  }
+
+  mobileClientRefreshTimer = setInterval(refreshClientsOnly, 10000);
+}
+
 function init() {
   initTheme();
 
@@ -979,6 +1043,7 @@ function init() {
   attachSortHandlers();
   attachTableSelection();
   loadData();
+  startMobileClientAutoRefresh();
 }
 
 document.addEventListener('DOMContentLoaded', init);
