@@ -26,7 +26,7 @@ import java.util.UUID;
 
 public class MainActivity extends Activity {
     private static final String API_BASE_URL = "https://incusmobile.scottibyte.com";
-    private static final String APP_VERSION = "0.1.2";
+    private static final String APP_VERSION = "0.1.3";
     private static final String PREFS_NAME = "scottibyte_incus_mobile";
     private static final String PREF_DEVICE_ID = "device_id";
     private static final String PREF_BEARER_TOKEN = "bearer_token";
@@ -37,6 +37,9 @@ public class MainActivity extends Activity {
     private TextView deviceIdView;
     private TextView tokenView;
     private EditText deviceNameInput;
+    private final Handler pairingHandler = new Handler(Looper.getMainLooper());
+    private boolean pairingPollingActive = false;
+    private static final long PAIRING_POLL_INTERVAL_MS = 5000;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -79,7 +82,7 @@ public class MainActivity extends Activity {
         requestPairingButton.setOnClickListener(v -> requestPairing());
 
         Button checkApprovalButton = new Button(this);
-        checkApprovalButton.setText("Check Approval / Claim Token");
+        checkApprovalButton.setText("Check Approval Now");
         checkApprovalButton.setOnClickListener(v -> checkPairingStatus());
 
         Button summaryButton = new Button(this);
@@ -165,6 +168,7 @@ public class MainActivity extends Activity {
     }
 
     private void resetLocalToken() {
+        stopPairingPolling();
         prefs.edit().remove(PREF_BEARER_TOKEN).apply();
         refreshTokenStatus();
         setStatus("Local token removed. Server approval was not changed.");
@@ -188,6 +192,36 @@ public class MainActivity extends Activity {
             }
         }).start();
     }
+
+
+    private void startPairingPolling() {
+        if (pairingPollingActive) {
+            return;
+        }
+
+        pairingPollingActive = true;
+        pairingHandler.postDelayed(pairingPollRunnable, PAIRING_POLL_INTERVAL_MS);
+    }
+
+    private void stopPairingPolling() {
+        pairingPollingActive = false;
+        pairingHandler.removeCallbacks(pairingPollRunnable);
+    }
+
+    private final Runnable pairingPollRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (!pairingPollingActive) {
+                return;
+            }
+
+            checkPairingStatus(true);
+
+            if (pairingPollingActive) {
+                pairingHandler.postDelayed(this, PAIRING_POLL_INTERVAL_MS);
+            }
+        }
+    };
 
     private void requestPairing() {
         saveDeviceName();
@@ -215,6 +249,27 @@ public class MainActivity extends Activity {
                     null
                 );
 
+                if (result.code >= 200 && result.code < 300) {
+                    JSONObject json = new JSONObject(result.body);
+                    String status = json.optString("status", "");
+
+                    if ("pending".equals(status)) {
+                        setStatus("Pairing request submitted.\n\nWaiting for admin approval...");
+                        startPairingPolling();
+                        return;
+                    }
+
+                    if ("approved".equals(status)) {
+                        setStatus("Device is already approved. Checking for token...");
+                        checkPairingStatus(true);
+                        return;
+                    }
+
+                    if ("revoked".equals(status)) {
+                        stopPairingPolling();
+                    }
+                }
+
                 setStatus(result.toDisplayString());
             } catch (Exception e) {
                 setStatus(errorText(e));
@@ -223,7 +278,13 @@ public class MainActivity extends Activity {
     }
 
     private void checkPairingStatus() {
-        setStatus("Checking pairing status...");
+        checkPairingStatus(false);
+    }
+
+    private void checkPairingStatus(boolean automatic) {
+        if (!automatic) {
+            setStatus("Checking pairing status...");
+        }
 
         new Thread(() -> {
             try {
@@ -242,7 +303,20 @@ public class MainActivity extends Activity {
                         String token = json.optString("token", "");
                         if (!token.trim().isEmpty()) {
                             saveBearerToken(token);
+                            stopPairingPolling();
+                            setStatus("Approved. Token claimed and stored locally.\n\n" + result.toDisplayString());
+                            return;
                         }
+                    }
+
+                    String status = json.optString("status", "");
+                    if ("pending".equals(status) && automatic) {
+                        setStatus("Waiting for admin approval...");
+                        return;
+                    }
+
+                    if ("revoked".equals(status)) {
+                        stopPairingPolling();
                     }
                 }
 
@@ -345,4 +419,10 @@ public class MainActivity extends Activity {
             return "HTTP " + code + "\n\n" + body;
         }
     }
+    @Override
+    protected void onDestroy() {
+        stopPairingPolling();
+        super.onDestroy();
+    }
+
 }
