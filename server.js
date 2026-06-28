@@ -8,6 +8,7 @@ const path = require('path');
 
 const { initDb } = require('./db');
 const mobileRoutes = require('./routes/mobile');
+const mobileOperationRoutes = require('./routes/mobileOperations');
 const pairingRoutes = require('./routes/pairing');
 const adminRoutes = require('./routes/admin');
 const adminAuthRoutes = require('./routes/adminAuth');
@@ -21,6 +22,7 @@ const {
 } = require('./adminAuth');
 const { BetterSqliteSessionStore } = require('./sessionStore');
 const { ensureAuditTable } = require('./audit');
+const { seedDefaultOperations } = require('./operations');
 
 const app = express();
 const PORT = Number(process.env.PORT || 3088);
@@ -37,6 +39,7 @@ app.use(express.json({ limit: '1mb' }));
 initDb();
 ensureAdminAuthTables();
 ensureAuditTable();
+seedDefaultOperations();
 
 const sessionHours = getSessionHours();
 
@@ -62,6 +65,7 @@ app.get('/', adminAccessGuard, requireAdminAuth, (req, res) => {
   res.redirect('/admin');
 });
 
+app.use('/api/mobile/operations', mobileOperationRoutes);
 app.use('/api/mobile', mobileRoutes);
 app.use('/api/pairing', pairingRoutes);
 
