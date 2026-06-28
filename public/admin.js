@@ -1,5 +1,6 @@
 let state = {
   health: null,
+  appTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
   summary: null,
   remotes: [],
   instances: [],
@@ -551,8 +552,6 @@ async function changeOperationRole(operationKey, roleRequired) {
   }
 }
 
-const APP_TIME_ZONE = 'America/Chicago';
-
 function formatLocalDateTime(value) {
   if (!value || value === '-') {
     return '-';
@@ -565,7 +564,7 @@ function formatLocalDateTime(value) {
   }
 
   return new Intl.DateTimeFormat('en-US', {
-    timeZone: APP_TIME_ZONE,
+    timeZone: state.appTimeZone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
     year: 'numeric',
     month: 'short',
     day: '2-digit',
@@ -852,6 +851,7 @@ async function loadData() {
     ]);
 
     state.health = health;
+    state.appTimeZone = health.app_time_zone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
     state.summary = summaryData.summary || {};
     state.remotes = normalizeRemotes(remotesData);
     state.ignoredRemotes = remotesData.ignored || [];

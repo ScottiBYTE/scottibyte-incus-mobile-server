@@ -11,6 +11,7 @@ router.get('/health', async (req, res) => {
     ok: true,
     app: process.env.APP_NAME || 'ScottiBYTE Incus Mobile Server',
     actions_enabled: process.env.MOBILE_ACTIONS_ENABLED === 'true',
+    app_time_zone: process.env.APP_TIME_ZONE || null,
     time: new Date().toISOString()
   });
 });
