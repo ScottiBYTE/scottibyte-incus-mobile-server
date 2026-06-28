@@ -358,6 +358,112 @@ async function loadOperationsPreview() {
   renderOperationsPreview();
 }
 
+
+function renderDryRunOperationOptions() {
+  const select = $('dryRunOperation');
+
+  if (!select) return;
+
+  const current = select.value;
+  const operations = state.operations || [];
+
+  select.innerHTML = operations.map((op) => `
+    <option value="${escapeHtml(op.operation_key)}">${escapeHtml(op.operation_key)}</option>
+  `).join('');
+
+  if (operations.some((op) => op.operation_key === current)) {
+    select.value = current;
+  }
+}
+
+function formatDryRunResult(result) {
+  const dryRun = result?.dry_run || result;
+
+  if (!dryRun) {
+    return 'No dry run result.';
+  }
+
+  const lines = [];
+
+  lines.push(`Allowed: ${dryRun.allowed ? 'yes' : 'no'}`);
+  lines.push(`Reason: ${dryRun.reason || '-'}`);
+  lines.push(`Operation: ${dryRun.operation || '-'}`);
+  lines.push(`Target: ${dryRun.target_id || '-'}`);
+
+  if (dryRun.role) {
+    lines.push(`Simulated role: ${dryRun.role}`);
+  }
+
+  if (dryRun.role_required) {
+    lines.push(`Role required: ${dryRun.role_required}`);
+  }
+
+  if (Array.isArray(dryRun.argv)) {
+    lines.push('');
+    lines.push('Incus argv:');
+    lines.push(`incus ${dryRun.argv.map((v) => String(v).includes(' ') ? JSON.stringify(v) : v).join(' ')}`);
+  }
+
+  return lines.join('\n');
+}
+
+async function runOperationDryRun() {
+  const btn = $('dryRunBtn');
+  const resultEl = $('dryRunResult');
+
+  const payload = {
+    operation: $('dryRunOperation').value,
+    target_type: $('dryRunTargetType').value.trim() || 'instance',
+    target_id: $('dryRunTargetId').value.trim(),
+    role: $('dryRunRole').value,
+    params: {}
+  };
+
+  if (!payload.operation || !payload.target_id) {
+    alert('Operation and Target ID are required.');
+    return;
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Testing...';
+  }
+
+  if (resultEl) {
+    resultEl.classList.remove('good', 'bad');
+    resultEl.textContent = 'Running dry run...';
+  }
+
+  try {
+    const data = await fetchJson('/api/admin/operations/dry-run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    const dryRun = data.dry_run || {};
+    if (resultEl) {
+      resultEl.textContent = formatDryRunResult(data);
+      resultEl.classList.toggle('good', Boolean(dryRun.allowed));
+      resultEl.classList.toggle('bad', !dryRun.allowed);
+    }
+
+    await loadAudit();
+  } catch (err) {
+    if (resultEl) {
+      resultEl.textContent = err.message || 'Dry run failed';
+      resultEl.classList.add('bad');
+    }
+
+    alert(err.message);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Dry Run';
+    }
+  }
+}
+
 function renderOperations() {
   const body = $('operationsBody');
 
@@ -371,6 +477,8 @@ function renderOperations() {
     `;
     return;
   }
+
+  renderDryRunOperationOptions();
 
   body.innerHTML = state.operations.map((op) => {
     const enabledText = op.enabled ? 'Enabled' : 'Disabled';

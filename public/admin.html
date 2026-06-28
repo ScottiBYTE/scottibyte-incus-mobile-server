@@ -182,6 +182,43 @@
         Loading mobile discovery preview...
       </div>
 
+      <div class="operation-dry-run-panel">
+        <div class="operation-dry-run-header">
+          <strong>Operation Dry Run</strong>
+          <span class="note">Validate a mobile operation request without executing it.</span>
+        </div>
+
+        <div class="operation-dry-run-grid">
+          <label>
+            Operation
+            <select id="dryRunOperation"></select>
+          </label>
+
+          <label>
+            Target Type
+            <input id="dryRunTargetType" value="instance" />
+          </label>
+
+          <label>
+            Target ID
+            <input id="dryRunTargetId" placeholder="mondo:default:Test1" />
+          </label>
+
+          <label>
+            Simulated Role
+            <select id="dryRunRole">
+              <option value="viewer">viewer</option>
+              <option value="operator" selected>operator</option>
+              <option value="admin">admin</option>
+            </select>
+          </label>
+
+          <button id="dryRunBtn" class="btn primary" type="button" onclick="runOperationDryRun()">Dry Run</button>
+        </div>
+
+        <pre id="dryRunResult" class="dry-run-result muted">No dry run yet.</pre>
+      </div>
+
       <div class="table-wrap selectable-table" data-table="operationsTable" tabindex="0">
         <table id="operationsTable">
           <thead>
@@ -191,8 +228,6 @@
               <th>Enabled</th>
               <th>Role Required</th>
               <th>Target Type</th>
-              <th>Runner</th>
-              <th>Template</th>
               <th>Actions</th>
             </tr>
           </thead>
