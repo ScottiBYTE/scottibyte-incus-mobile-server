@@ -46,7 +46,7 @@ public class MainActivity extends Activity {
     private static final String PREF_SERVER_URL = "server_url";
     private static final String PREF_CLIENT_ROLE = "client_role";
     private static final String DEFAULT_API_BASE_URL = "";
-    private static final String APP_VERSION = "0.3.36";
+    private static final String APP_VERSION = "0.3.37";
     private static final String PREFS_NAME = "scottibyte_incus_mobile";
     private static final String PREF_DEVICE_ID = "device_id";
     private static final String PREF_BEARER_TOKEN = "bearer_token";
@@ -73,6 +73,7 @@ public class MainActivity extends Activity {
     private Button headerDetailsButton;
     private TextView headerDetailsView;
     private boolean headerDetailsVisible = false;
+    private LinearLayout fixedActionBarLayout;
 
     private String apiBaseUrl = "";
     private String mobileClientRole = "unknown";
@@ -396,6 +397,45 @@ ensureDeviceId();
         });
         backToInstancesButton.setVisibility(View.GONE);
 
+        fixedActionBarLayout = new LinearLayout(this);
+        fixedActionBarLayout.setOrientation(LinearLayout.VERTICAL);
+        fixedActionBarLayout.setPadding(0, 4, 0, 4);
+        fixedActionBarLayout.setVisibility(View.GONE);
+
+        LinearLayout.LayoutParams fixedActionBarParams = new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        fixedActionBarParams.setMargins(0, 0, 0, 6);
+        fixedActionBarLayout.setLayoutParams(fixedActionBarParams);
+
+        LinearLayout.LayoutParams fixedButtonParams = new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        fixedButtonParams.setMargins(0, 4, 0, 4);
+
+        summaryButton.setLayoutParams(fixedButtonParams);
+
+        LinearLayout.LayoutParams fixedBackToServersParams = new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        fixedBackToServersParams.setMargins(0, 4, 0, 4);
+        backToServersButton.setLayoutParams(fixedBackToServersParams);
+
+        LinearLayout.LayoutParams fixedBackToInstancesParams = new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        fixedBackToInstancesParams.setMargins(0, 4, 0, 4);
+        backToInstancesButton.setLayoutParams(fixedBackToInstancesParams);
+
+        fixedActionBarLayout.addView(summaryButton);
+        fixedActionBarLayout.addView(backToServersButton);
+        fixedActionBarLayout.addView(backToInstancesButton);
+        fixedHeaderLayout.addView(fixedActionBarLayout);
+
         resetButton = new Button(this);
         resetButton.setText("Reset Pairing");
         resetButton.setOnClickListener(v -> resetLocalToken());
@@ -507,7 +547,6 @@ ensureDeviceId();
         layout.addView(healthButton);
         layout.addView(requestPairingButton);
         layout.addView(checkApprovalButton);
-        layout.addView(summaryButton);
         layout.addView(instancesButton);
         layout.addView(resetButton);
         layout.addView(tokenView);
@@ -516,8 +555,6 @@ ensureDeviceId();
         layout.addView(remoteSummaryView);
         layout.addView(serverCardsContainer);
         layout.addView(selectedServerView);
-        layout.addView(backToServersButton);
-        layout.addView(backToInstancesButton);
         layout.addView(serverFilterInput);
         layout.addView(instanceFilterInput);
         layout.addView(instancesView);
@@ -617,6 +654,7 @@ ensureDeviceId();
 
         suppressFilterEvents = false;
         hidePrototypeTextViews();
+        updateFixedActionBarVisibility();
         scrollContentToTop();
     }
 
@@ -672,6 +710,7 @@ ensureDeviceId();
         }
 
         hidePrototypeTextViews();
+        updateFixedActionBarVisibility();
         scrollContentToTop();
     }
 
@@ -730,6 +769,28 @@ ensureDeviceId();
         scrollContentToTop();
     }
 
+    private void updateFixedActionBarVisibility() {
+        if (fixedActionBarLayout == null) {
+            return;
+        }
+
+        boolean visible = false;
+
+        if (summaryButton != null && summaryButton.getVisibility() == View.VISIBLE) {
+            visible = true;
+        }
+
+        if (backToServersButton != null && backToServersButton.getVisibility() == View.VISIBLE) {
+            visible = true;
+        }
+
+        if (backToInstancesButton != null && backToInstancesButton.getVisibility() == View.VISIBLE) {
+            visible = true;
+        }
+
+        fixedActionBarLayout.setVisibility(visible ? View.VISIBLE : View.GONE);
+    }
+
     private void updateAuthUiVisibility() {
         boolean authorized = hasBearerToken();
 
@@ -756,6 +817,8 @@ ensureDeviceId();
         if (healthButton != null) {
             healthButton.setVisibility(View.GONE);
         }
+
+        updateFixedActionBarVisibility();
     }
 
     private void ensureDeviceId() {
