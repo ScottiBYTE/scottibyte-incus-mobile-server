@@ -1,4 +1,5 @@
 const express = require('express');
+const { getMobileActionsStatus } = require('../operations');
 const { getAllInstances, getRemotes, runInstanceAction } = require('../incus');
 const { allowAdminBypass, requireMobileAuth } = require('../auth');
 
@@ -10,7 +11,8 @@ router.get('/health', async (req, res) => {
   res.json({
     ok: true,
     app: process.env.APP_NAME || 'ScottiBYTE Incus Mobile Server',
-    actions_enabled: process.env.MOBILE_ACTIONS_ENABLED === 'true',
+    actions_enabled: getMobileActionsStatus().effective_enabled,
+    mobile_actions: getMobileActionsStatus(),
     app_time_zone: process.env.APP_TIME_ZONE || null,
     time: new Date().toISOString()
   });
@@ -117,7 +119,7 @@ function isProtectedInstance(instance) {
 }
 
 function canRunAction(client, instance, action) {
-  if (process.env.MOBILE_ACTIONS_ENABLED !== 'true') {
+  if (!getMobileActionsStatus().effective_enabled) {
     return { ok: false, reason: 'Mobile actions disabled' };
   }
 

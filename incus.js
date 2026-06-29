@@ -2,6 +2,7 @@ const { execFile, execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const { Client } = require('ssh2');
+const { getMobileActionsStatus } = require('./operations');
 
 function runIncus(args, timeoutMs = 30000) {
   return new Promise((resolve, reject) => {
@@ -655,7 +656,7 @@ function getLastBackup(backups) {
 }
 
 function getAllowedActions(inst) {
-  const actionsEnabled = process.env.MOBILE_ACTIONS_ENABLED === 'true';
+  const actionsEnabled = getMobileActionsStatus().effective_enabled;
 
   if (!actionsEnabled) {
     return {

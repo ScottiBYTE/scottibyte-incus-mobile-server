@@ -2,16 +2,111 @@ const express = require('express');
 const crypto = require('crypto');
 const { db } = require('../db');
 const { getRemoteInventory, addRemoteViaSsh, removeRemote, testRemote } = require('../incus');
-const { logAuditEvent, listAuditEvents, getAdminActor } = require('../audit');
+const { logAuditEvent, listAuditEvents, listAuditEventsForExport, getAdminActor } = require('../audit');
 const {
   listOperationDefinitionsForRole,
   listAllOperationDefinitions,
   setOperationEnabled,
   setOperationRole,
+  getMobileActionsStatus,
+  setMobileActionsServerEnabled,
   dryRunOperationRequest
 } = require('../operations');
 
 const router = express.Router();
+
+function csvEscape(value) {
+  if (value == null) {
+    return '';
+  }
+
+  const text = String(value);
+  if (/[",\n\r]/.test(text)) {
+    return '"' + text.replace(/"/g, '""') + '"';
+  }
+
+  return text;
+}
+
+function humanAuditActivity(row) {
+  const eventType = row.event_type || 'unknown';
+  const target = row.target_id || row.target_type || '';
+
+  const labels = {
+    'client.approved': 'Approved mobile client',
+    'client.revoked': 'Revoked mobile client',
+    'client.restored_pending': 'Restored mobile client to pending',
+    'client.renamed': 'Renamed mobile client',
+    'client.role.changed': 'Changed mobile client role',
+    'instance.start': 'Started instance',
+    'instance.stop': 'Stopped instance',
+    'instance.restart': 'Restarted instance',
+    'terminal.opened': 'Opened shell terminal',
+    'terminal.closed': 'Closed shell terminal',
+    'remote.added': 'Added remote',
+    'remote.deleted': 'Deleted remote',
+    'remote.tested': 'Tested remote',
+    'operation.enabled': 'Enabled mobile operation',
+    'operation.disabled': 'Disabled mobile operation',
+    'operation.updated': 'Updated mobile operation',
+    'admin.credentials.cleared': 'Cleared admin credentials'
+  };
+
+  if (labels[eventType]) {
+    return labels[eventType];
+  }
+
+  return eventType
+    .replace(/\./g, ' ')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function humanAuditTarget(row) {
+  if (row.target_id) {
+    return row.target_id;
+  }
+
+  if (row.target_type) {
+    return row.target_type;
+  }
+
+  return '';
+}
+
+function auditRowsToCsv(rows) {
+  const columns = [
+    'Time',
+    'Actor',
+    'Actor Type',
+    'Activity',
+    'Target',
+    'Result',
+    'Details',
+    'Event Type',
+    'Target Type'
+  ];
+
+  const lines = [columns.join(',')];
+
+  for (const row of rows) {
+    const exportRow = {
+      Time: row.created_at,
+      Actor: row.actor_name || row.actor_type || '',
+      'Actor Type': row.actor_type || '',
+      Activity: humanAuditActivity(row),
+      Target: humanAuditTarget(row),
+      Result: row.result || '',
+      Details: row.message || '',
+      'Event Type': row.event_type || '',
+      'Target Type': row.target_type || ''
+    };
+
+    lines.push(columns.map((column) => csvEscape(exportRow[column])).join(','));
+  }
+
+  return lines.join('\n') + '\n';
+}
 
 router.get('/audit-events', (req, res) => {
   try {
@@ -28,6 +123,31 @@ router.get('/audit-events', (req, res) => {
     });
   }
 });
+
+router.get('/audit-events/export.csv', (req, res) => {
+  const limit = Math.max(1, Math.min(Number(req.query.limit || 5000), 50000));
+  const rows = listAuditEventsForExport(limit);
+  const csv = auditRowsToCsv(rows);
+
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="scottibyte-incus-mobile-audit-${stamp}.csv"`);
+  res.send(csv);
+});
+
+router.get('/audit-events/export.json', (req, res) => {
+  const limit = Math.max(1, Math.min(Number(req.query.limit || 5000), 50000));
+  const rows = listAuditEventsForExport(limit).map((row) => ({
+    ...row,
+    metadata: row.metadata_json ? JSON.parse(row.metadata_json) : null
+  }));
+
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="scottibyte-incus-mobile-audit-${stamp}.json"`);
+  res.send(JSON.stringify(rows, null, 2));
+});
+
 
 
 function nowIso() {
@@ -490,6 +610,67 @@ router.delete('/remotes/:name', async (req, res) => {
 
 
 
+router.get('/mobile-actions', (req, res) => {
+  try {
+    res.json({
+      ok: true,
+      mobile_actions: getMobileActionsStatus()
+    });
+  } catch (err) {
+    res.status(500).json({
+      ok: false,
+      error: err.message
+    });
+  }
+});
+
+router.post('/mobile-actions', (req, res) => {
+  const enabled = Boolean(req.body?.enabled);
+
+  try {
+    const before = getMobileActionsStatus();
+    const after = setMobileActionsServerEnabled(enabled);
+
+    logAuditEvent({
+      ...getAdminActor(req),
+      event_type: enabled ? 'mobile_actions.enabled' : 'mobile_actions.disabled',
+      target_type: 'mobile_actions',
+      target_id: 'global',
+      result: 'success',
+      message: enabled
+        ? 'Enabled global mobile actions from admin UI'
+        : 'Disabled global mobile actions from admin UI',
+      metadata: {
+        previous: before,
+        current: after
+      }
+    });
+
+    res.json({
+      ok: true,
+      mobile_actions: after
+    });
+  } catch (err) {
+    logAuditEvent({
+      ...getAdminActor(req),
+      event_type: enabled ? 'mobile_actions.enabled' : 'mobile_actions.disabled',
+      target_type: 'mobile_actions',
+      target_id: 'global',
+      result: 'failed',
+      message: err.message,
+      metadata: {
+        requested_enabled: enabled
+      }
+    });
+
+    res.status(400).json({
+      ok: false,
+      error: err.message
+    });
+  }
+});
+
+
 router.get('/operations-preview', (req, res) => {
   try {
     const roles = ['viewer', 'operator', 'admin'];
@@ -513,6 +694,7 @@ router.get('/operations', (req, res) => {
   try {
     res.json({
       ok: true,
+      mobile_actions: getMobileActionsStatus(),
       operations: listAllOperationDefinitions()
     });
   } catch (err) {

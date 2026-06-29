@@ -2,6 +2,7 @@ const express = require('express');
 const { requireMobileAuth } = require('../auth');
 const {
   listOperationDefinitionsForRole,
+  getMobileActionsStatus,
   executeOperationRequest
 } = require('../operations');
 
@@ -14,6 +15,7 @@ router.get('/', requireMobileAuth, (req, res) => {
     res.json({
       ok: true,
       role,
+      mobile_actions: getMobileActionsStatus(),
       operations: listOperationDefinitionsForRole(role)
     });
   } catch (err) {

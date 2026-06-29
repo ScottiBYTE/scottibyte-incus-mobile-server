@@ -414,11 +414,11 @@ tbody tr:hover {
 }
 
 #actionsStatus.enabled {
-  color: var(--bad);
+  color: var(--good);
 }
 
 #actionsStatus.disabled {
-  color: var(--good);
+  color: var(--bad);
 }
 
 #remoteCount {
@@ -593,11 +593,11 @@ thead th[data-sort]::after {
 }
 
 #actionsStatus.enabled {
-  color: var(--bad);
+  color: var(--good);
 }
 
 #actionsStatus.disabled {
-  color: var(--good);
+  color: var(--bad);
 }
 
 
@@ -1066,11 +1066,14 @@ body.light-theme .theme-btn {
 }
 
 body.light-theme #adminAccessStatus,
-body.light-theme #actionsStatus.disabled,
 body.light-theme #approvedClientCount,
 body.light-theme #runningTotal,
 body.light-theme #errorsTotal {
   color: #16a34a;
+}
+
+body.light-theme #actionsStatus.disabled {
+  color: #b91c1c !important;
 }
 
 body.light-theme #remoteCount,
@@ -1441,4 +1444,9 @@ body.light-theme .remote-add-grid label span {
 
 .operation-dry-run-panel:not([open]) summary {
   min-height: 1.5rem;
+}
+
+
+body.light-theme #actionsStatus.enabled {
+  color: #16a34a !important;
 }

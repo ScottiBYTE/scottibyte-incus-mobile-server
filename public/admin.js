@@ -7,6 +7,7 @@ let state = {
   clients: [],
   operations: [],
   operationsPreview: [],
+  mobileActions: null,
   ignoredRemotes: [],
   remoteTests: {},
   instanceSort: { key: 'remote', dir: 'asc' },
@@ -120,9 +121,17 @@ function metricBubble(value) {
 
 function renderStatus() {
   const actionsEl = $('actionsStatus');
-  actionsEl.textContent = state.health?.actions_enabled ? 'Enabled' : 'Disabled';
+
+  const mobileActions = state.health?.mobile_actions || state.mobileActions || null;
+  const actionsEnabled = mobileActions
+    ? mobileActions.effective_enabled === true
+    : state.health?.actions_enabled === true;
+
+  const actionsText = actionsEnabled ? 'Enabled' : 'Disabled';
+
+  actionsEl.textContent = actionsText;
   actionsEl.classList.remove('enabled', 'disabled');
-  actionsEl.classList.add(state.health?.actions_enabled ? 'enabled' : 'disabled');
+  actionsEl.classList.add(actionsEnabled ? 'enabled' : 'disabled');
 
   $('remoteCount').textContent = String(state.remotes.length);
 
@@ -466,7 +475,132 @@ async function runOperationDryRun() {
   }
 }
 
+function renderMobileActionsStatus() {
+  const table = $('operationsTable');
+  if (!table || !table.parentElement) {
+    return;
+  }
+
+  let panel = $('mobileActionsPanel');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'mobileActionsPanel';
+    panel.style.display = 'flex';
+    panel.style.alignItems = 'center';
+    panel.style.justifyContent = 'space-between';
+    panel.style.gap = '12px';
+    panel.style.flexWrap = 'wrap';
+    panel.style.margin = '10px 0 12px 0';
+    panel.style.padding = '12px';
+    panel.style.border = '1px solid rgba(56, 189, 248, 0.35)';
+    panel.style.borderRadius = '12px';
+    panel.style.background = 'rgba(14, 165, 233, 0.08)';
+
+    table.parentElement.insertBefore(panel, table);
+  }
+
+  const status = state.mobileActions;
+
+  if (!status) {
+    panel.innerHTML = `
+      <div>
+        <strong>Global Mobile Actions</strong><br>
+        <span class="note">
+          Master server switch for Start, Stop, Restart, and Shell discovery/execution.
+        </span>
+      </div>
+      <div class="actions" style="align-items:center;">
+        ${bubble('Loading', 'neutral')}
+      </div>
+    `;
+
+    fetchJson('/api/admin/mobile-actions')
+      .then((data) => {
+        state.mobileActions = data.mobile_actions || null;
+        renderMobileActionsStatus();
+      })
+      .catch((err) => {
+        panel.innerHTML = `
+          <div>
+            <strong>Global Mobile Actions</strong><br>
+            <span class="note bad">Could not load global mobile actions status: ${escapeHtml(err.message || err)}</span>
+          </div>
+          <div class="actions" style="align-items:center;">
+            ${bubble('Error', 'bad')}
+          </div>
+        `;
+      });
+
+    return;
+  }
+
+  const effective = status.effective_enabled === true;
+  const hardEnabled = status.hard_enabled === true;
+  const serverEnabled = status.server_enabled === true;
+
+  const statusText = effective
+    ? 'Enabled'
+    : hardEnabled
+      ? 'Disabled by server switch'
+      : 'Disabled by .env hard switch';
+
+  const nextEnabled = !serverEnabled;
+  const buttonLabel = serverEnabled ? 'Disable All Mobile Actions' : 'Enable All Mobile Actions';
+
+  panel.innerHTML = `
+    <div>
+      <strong>Global Mobile Actions</strong><br>
+      <span class="note">
+        Master server switch for Start, Stop, Restart, and Shell discovery/execution.
+        .env hard switch: ${hardEnabled ? 'enabled' : 'disabled'}.
+      </span>
+    </div>
+    <div class="actions" style="align-items:center;">
+      ${bubble(statusText, effective ? 'good' : 'bad')}
+      <button
+        class="btn ${serverEnabled ? 'danger' : 'primary'}"
+        onclick="setGlobalMobileActionsEnabled(${nextEnabled})"
+        ${hardEnabled ? '' : 'disabled title="MOBILE_ACTIONS_ENABLED=false in .env is the hard safety override"'}
+      >${escapeHtml(buttonLabel)}</button>
+    </div>
+  `;
+}
+
+async function setGlobalMobileActionsEnabled(enabled) {
+  try {
+    const data = await fetchJson('/api/admin/mobile-actions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled })
+    });
+
+    state.mobileActions = data.mobile_actions || null;
+
+    if (state.health && state.mobileActions) {
+      state.health.actions_enabled = state.mobileActions.effective_enabled === true;
+      state.health.mobile_actions = state.mobileActions;
+    }
+
+    renderStatus();
+    renderMobileActionsStatus();
+
+    await loadOperations();
+    await loadOperationsPreview();
+    await loadAudit();
+
+    if (state.health && state.mobileActions) {
+      state.health.actions_enabled = state.mobileActions.effective_enabled === true;
+      state.health.mobile_actions = state.mobileActions;
+      renderStatus();
+    }
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
 function renderOperations() {
+  renderMobileActionsStatus();
+
   const body = $('operationsBody');
 
   if (!body) return;
@@ -516,7 +650,21 @@ function renderOperations() {
 
 async function loadOperations() {
   const data = await fetchJson('/api/admin/operations');
+
   state.operations = data.operations || [];
+
+  if (data.mobile_actions) {
+    state.mobileActions = data.mobile_actions;
+  } else {
+    try {
+      const actionsData = await fetchJson('/api/admin/mobile-actions');
+      state.mobileActions = actionsData.mobile_actions || null;
+    } catch (err) {
+      console.warn('Could not load mobile actions status:', err);
+      state.mobileActions = null;
+    }
+  }
+
   renderOperations();
 }
 
@@ -1030,6 +1178,78 @@ function initTheme() {
 
 
 
+
+function exportAudit(format) {
+  const safeFormat = format === 'json' ? 'json' : 'csv';
+  window.location.href = `/api/admin/audit-events/export.${safeFormat}?limit=5000`;
+}
+
+function ensureAuditExportButtons() {
+  const refreshBtn = $('refreshAuditBtn');
+
+  if (!refreshBtn || !refreshBtn.parentElement) {
+    return false;
+  }
+
+  // Remove the JSON button from earlier testing. CSV is the useful audit export.
+  const oldJsonBtn = $('exportAuditJsonBtn');
+  if (oldJsonBtn) {
+    oldJsonBtn.remove();
+  }
+
+  if ($('auditActionGroup') && $('exportAuditCsvBtn')) {
+    return true;
+  }
+
+  const originalParent = refreshBtn.parentElement;
+
+  const actionGroup = document.createElement('div');
+  actionGroup.id = 'auditActionGroup';
+  actionGroup.style.display = 'flex';
+  actionGroup.style.alignItems = 'center';
+  actionGroup.style.justifyContent = 'flex-end';
+  actionGroup.style.gap = '8px';
+  actionGroup.style.flexWrap = 'wrap';
+  actionGroup.style.marginLeft = 'auto';
+
+  originalParent.insertBefore(actionGroup, refreshBtn);
+  actionGroup.appendChild(refreshBtn);
+
+  const csvBtn = document.createElement('button');
+  csvBtn.id = 'exportAuditCsvBtn';
+  csvBtn.className = 'btn secondary';
+  csvBtn.type = 'button';
+  csvBtn.textContent = 'Export Audit CSV';
+  csvBtn.title = 'Download a human-readable audit report as CSV';
+  csvBtn.onclick = () => exportAudit('csv');
+
+  // Slight highlight so export is visible but not as visually dangerous as revoke/delete.
+  csvBtn.style.borderColor = 'rgba(56, 189, 248, 0.65)';
+  csvBtn.style.color = '#bfdbfe';
+
+  actionGroup.appendChild(csvBtn);
+
+  return true;
+}
+
+
+function scheduleAuditExportButtons() {
+  let attempts = 0;
+
+  const timer = setInterval(() => {
+    attempts += 1;
+
+    if (ensureAuditExportButtons() || attempts >= 40) {
+      clearInterval(timer);
+    }
+  }, 250);
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', scheduleAuditExportButtons);
+} else {
+  scheduleAuditExportButtons();
+}
 
 async function refreshAuditWithFeedback() {
   const btn = $('refreshAuditBtn');

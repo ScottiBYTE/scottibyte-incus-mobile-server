@@ -163,8 +163,73 @@ function getOperationDefinition(operationKey) {
   return parseOperationRow(row);
 }
 
+function ensureAppSettingsTable() {
+  db.prepare(`
+    CREATE TABLE IF NOT EXISTS app_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT,
+      updated_at TEXT NOT NULL
+    )
+  `).run();
+}
+
+function getAppSetting(key, defaultValue = null) {
+  ensureAppSettingsTable();
+
+  const row = db.prepare(`
+    SELECT value
+    FROM app_settings
+    WHERE key = ?
+  `).get(String(key));
+
+  return row ? row.value : defaultValue;
+}
+
+function setAppSetting(key, value) {
+  ensureAppSettingsTable();
+
+  db.prepare(`
+    INSERT INTO app_settings (key, value, updated_at)
+    VALUES (?, ?, ?)
+    ON CONFLICT(key) DO UPDATE SET
+      value = excluded.value,
+      updated_at = excluded.updated_at
+  `).run(String(key), String(value), nowIso());
+}
+
+function envMobileActionsEnabled() {
+  return String(process.env.MOBILE_ACTIONS_ENABLED || 'false').toLowerCase() === 'true';
+}
+
+function serverMobileActionsEnabled() {
+  return String(getAppSetting('mobile_actions_enabled', 'true')).toLowerCase() === 'true';
+}
+
+function getMobileActionsStatus() {
+  const hard_enabled = envMobileActionsEnabled();
+  const server_enabled = serverMobileActionsEnabled();
+
+  return {
+    hard_enabled,
+    server_enabled,
+    effective_enabled: hard_enabled && server_enabled,
+    hard_source: 'MOBILE_ACTIONS_ENABLED',
+    server_setting: 'mobile_actions_enabled'
+  };
+}
+
+function setMobileActionsServerEnabled(enabled) {
+  const value = enabled ? 'true' : 'false';
+  setAppSetting('mobile_actions_enabled', value);
+  return getMobileActionsStatus();
+}
+
 function listOperationDefinitionsForRole(role) {
   ensureOperationTables();
+
+  if (!getMobileActionsStatus().effective_enabled) {
+    return [];
+  }
 
   const actorRank = ROLE_RANK[role] || 0;
 
@@ -384,6 +449,20 @@ function dryRunOperationRequest(request, simulatedRole = 'operator') {
     throw new Error('target_id is required');
   }
 
+  const mobileActionsStatus = getMobileActionsStatus();
+  if (!mobileActionsStatus.effective_enabled) {
+    return {
+      allowed: false,
+      reason: mobileActionsStatus.hard_enabled
+        ? 'Mobile actions disabled by server setting'
+        : 'Mobile actions disabled by .env hard switch',
+      operation: operationKey,
+      target_type: targetType,
+      target_id: targetId,
+      mobile_actions: mobileActionsStatus
+    };
+  }
+
   const operation = getOperationDefinition(operationKey);
 
   if (!operation) {
@@ -541,9 +620,9 @@ async function executeOperationRequest(req, request) {
     };
   }
 
-  const mobileActionsEnabled = String(process.env.MOBILE_ACTIONS_ENABLED || 'false').toLowerCase() === 'true';
+  const mobileActionsStatus = getMobileActionsStatus();
 
-  if (!mobileActionsEnabled) {
+  if (!mobileActionsStatus.effective_enabled) {
     logAuditEvent({
       actor_type: actor.actor_type,
       actor_id: actor.actor_id,
@@ -552,10 +631,13 @@ async function executeOperationRequest(req, request) {
       target_type: targetType,
       target_id: targetId,
       result: 'blocked',
-      message: `Mobile operations are globally disabled: ${operationKey}`,
+      message: mobileActionsStatus.hard_enabled
+        ? `Mobile operations are disabled by server setting: ${operationKey}`
+        : `Mobile operations are disabled by .env hard switch: ${operationKey}`,
       metadata: {
         operation: operationKey,
-        role: actor.role
+        role: actor.role,
+        mobile_actions: mobileActionsStatus
       }
     });
 
@@ -802,6 +884,8 @@ module.exports = {
   listAllOperationDefinitions,
   setOperationEnabled,
   setOperationRole,
+  getMobileActionsStatus,
+  setMobileActionsServerEnabled,
   dryRunOperationRequest,
   executeOperationRequest
 };

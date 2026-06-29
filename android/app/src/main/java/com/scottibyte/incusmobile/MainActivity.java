@@ -55,7 +55,7 @@ public class MainActivity extends Activity {
     private static final String PREF_SERVER_URL = "server_url";
     private static final String PREF_CLIENT_ROLE = "client_role";
     private static final String DEFAULT_API_BASE_URL = "";
-    private static final String APP_VERSION = "0.4.10";
+    private static final String APP_VERSION = "0.4.11";
     private static final String PREFS_NAME = "scottibyte_incus_mobile";
     private static final String PREF_DEVICE_ID = "device_id";
     private static final String PREF_BEARER_TOKEN = "bearer_token";
@@ -124,6 +124,7 @@ public class MainActivity extends Activity {
     private String selectedInstanceKey = "";
     private JSONObject lastSelectedInstance = null;
     private final HashSet<String> allowedOperations = new HashSet<>();
+    private boolean mobileActionsEffectiveEnabled = true;
     private boolean suppressFilterEvents = false;
     private EditText deviceNameInput;
     private final Handler pairingHandler = new Handler(Looper.getMainLooper());
@@ -2495,8 +2496,25 @@ ensureDeviceId();
     }
 
 
+    private boolean updateMobileActionsStatusFromResponse(JSONObject json) {
+        boolean previous = mobileActionsEffectiveEnabled;
+
+        JSONObject mobileActions = json.optJSONObject("mobile_actions");
+        if (mobileActions != null) {
+            mobileActionsEffectiveEnabled = mobileActions.optBoolean("effective_enabled", true);
+        } else if (json.has("actions_enabled")) {
+            mobileActionsEffectiveEnabled = json.optBoolean("actions_enabled", true);
+        }
+
+        if (!mobileActionsEffectiveEnabled) {
+            allowedOperations.clear();
+        }
+
+        return previous != mobileActionsEffectiveEnabled;
+    }
+
     private boolean hasAllowedOperation(String operation) {
-        return allowedOperations.contains(operation);
+        return mobileActionsEffectiveEnabled && allowedOperations.contains(operation);
     }
 
     private void fetchMobileOperations() {
@@ -2538,19 +2556,28 @@ ensureDeviceId();
 
                     runOnUiThread(() -> {
                         updateClientIdentityFromResponse(json);
+                        updateMobileActionsStatusFromResponse(json);
 
                         allowedOperations.clear();
-                        allowedOperations.addAll(nextAllowed);
-                        setConnectionStatus("Loaded " + allowedOperations.size() + " mobile operations.");
+                        if (mobileActionsEffectiveEnabled) {
+                            allowedOperations.addAll(nextAllowed);
+                        }
+                        setConnectionStatus(mobileActionsEffectiveEnabled
+                            ? "Loaded " + allowedOperations.size() + " mobile operations."
+                            : "Mobile actions are disabled. Read-only mode.");
 
                         if (lastInstances != null) {
                             renderInstancesList();
+                            refreshSelectedInstanceCard();
+                        } else {
                             refreshSelectedInstanceCard();
                         }
                     });
                 } else {
                     runOnUiThread(() -> {
+                        mobileActionsEffectiveEnabled = false;
                         allowedOperations.clear();
+                        refreshSelectedInstanceCard();
                     });
                 }
             } catch (Exception e) {
@@ -2881,6 +2908,10 @@ ensureDeviceId();
     }
 
     private void addInstanceOperationButtons(LinearLayout card, JSONObject item) {
+        if (!mobileActionsEffectiveEnabled) {
+            return;
+        }
+
         if (card == null || item == null) {
             return;
         }
@@ -2896,9 +2927,9 @@ ensureDeviceId();
         boolean running = isRunning(item);
         boolean container = isContainer(item);
 
-        boolean showStart = !running;
-        boolean showStop = running;
-        boolean showRestart = running;
+        boolean showStart = !running && hasAllowedOperation("instance.start");
+        boolean showStop = running && hasAllowedOperation("instance.stop");
+        boolean showRestart = running && hasAllowedOperation("instance.restart");
         boolean showShell = admin &&
             running &&
             container &&
