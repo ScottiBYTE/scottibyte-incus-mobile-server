@@ -1,0 +1,453 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
+  >
+  <link rel="stylesheet" href="/vendor/xterm/xterm.css">
+  <style>
+    :root {
+      --app-height: 100vh;
+      --topbar-height: 54px;
+      --keybar-height: 40px;
+      --terminal-height: calc(100vh - 94px);
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: var(--app-height);
+      background: #020617;
+      overflow: hidden;
+    }
+
+    body {
+      box-sizing: border-box;
+      overflow: hidden;
+      font-family: sans-serif;
+    }
+
+    #topbar {
+      height: var(--topbar-height);
+      min-height: var(--topbar-height);
+      max-height: var(--topbar-height);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 8px;
+      box-sizing: border-box;
+      background: #020617;
+      border-bottom: 1px solid #1e293b;
+    }
+
+    #title {
+      flex: 1;
+      color: #ffffff;
+      font-size: 17px;
+      font-weight: 700;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
+    #exitBtn {
+      height: 42px;
+      min-width: 80px;
+      border: 1px solid #f87171;
+      background: #7f1d1d;
+      color: #ffffff;
+      border-radius: 8px;
+      font-size: 16px;
+    }
+
+    #keybar {
+      height: var(--keybar-height);
+      min-height: var(--keybar-height);
+      max-height: var(--keybar-height);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 6px;
+      box-sizing: border-box;
+      background: #0f172a;
+      border-bottom: 1px solid #1e293b;
+      overflow-x: auto;
+      overflow-y: hidden;
+      white-space: nowrap;
+    }
+
+    .termkey {
+      height: 31px;
+      min-width: 40px;
+      padding: 0 9px;
+      box-sizing: border-box;
+      border: 1px solid #334155;
+      background: #111827;
+      color: #e5e7eb;
+      border-radius: 8px;
+      font-size: 13px;
+      line-height: 31px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: manipulation;
+    }
+
+    .termkey.active {
+      background: #1d4ed8;
+      border-color: #60a5fa;
+      color: #ffffff;
+    }
+
+    .termkey.danger {
+      background: #7f1d1d;
+      border-color: #f87171;
+    }
+
+    #terminal {
+      height: var(--terminal-height);
+      max-height: var(--terminal-height);
+      width: 100vw;
+      box-sizing: border-box;
+      padding: 6px 8px 18px 8px;
+      background: #020617;
+      overflow: hidden;
+    }
+
+    .xterm {
+      height: 100%;
+    }
+
+    .xterm-viewport {
+      background: #020617 !important;
+    }
+  </style>
+</head>
+<body>
+  <div id="topbar">
+    <div id="title">Shell</div>
+    <button id="exitBtn" type="button">Exit</button>
+  </div>
+
+  <div id="keybar">
+    <button id="ctrlBtn" class="termkey" type="button">CTRL</button>
+    <button id="altBtn" class="termkey" type="button">ALT</button>
+    <button class="termkey" type="button" data-key="esc">ESC</button>
+    <button class="termkey" type="button" data-key="tab">TAB</button>
+    <button class="termkey" type="button" data-key="left">←</button>
+    <button class="termkey" type="button" data-key="right">→</button>
+    <button class="termkey" type="button" data-key="up">↑</button>
+    <button class="termkey" type="button" data-key="down">↓</button>
+    <button class="termkey danger" type="button" data-key="ctrl-c">C-c</button>
+    <button class="termkey danger" type="button" data-key="ctrl-d">C-d</button>
+    <button class="termkey" type="button" data-command="clear">Clear</button>
+  </div>
+
+  <div id="terminal"></div>
+
+  <script src="/vendor/xterm/xterm.js"></script>
+  <script src="/vendor/xterm-fit/addon-fit.js"></script>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const target = params.get('target') || '';
+    const token = params.get('token') || '';
+
+    document.getElementById('title').textContent = 'Shell: ' + target;
+
+    let ctrlNext = false;
+    let altNext = false;
+    let ws = null;
+
+    const terminalEl = document.getElementById('terminal');
+    const topbar = document.getElementById('topbar');
+    const keybar = document.getElementById('keybar');
+    const ctrlBtn = document.getElementById('ctrlBtn');
+    const altBtn = document.getElementById('altBtn');
+
+    const term = new Terminal({
+      cursorBlink: true,
+      convertEol: true,
+      fontFamily: 'monospace',
+      fontSize: 15,
+      scrollback: 5000,
+      theme: {
+        background: '#020617',
+        foreground: '#e5e7eb',
+        cursor: '#facc15',
+        selectionBackground: '#334155'
+      }
+    });
+
+    const fitAddon = new FitAddon.FitAddon();
+    term.loadAddon(fitAddon);
+    term.open(terminalEl);
+
+    function visibleHeight() {
+      const inner = window.innerHeight || document.documentElement.clientHeight || 600;
+      if (window.visualViewport && window.visualViewport.height) {
+        return Math.min(inner, window.visualViewport.height);
+      }
+      return inner;
+    }
+
+    function setCtrlActive(active) {
+      ctrlNext = active;
+      ctrlBtn.classList.toggle('active', active);
+    }
+
+    function setAltActive(active) {
+      altNext = active;
+      altBtn.classList.toggle('active', active);
+    }
+
+    function sendInput(data) {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'input', data }));
+      }
+    }
+
+    function applyModifierKeys(data) {
+      let out = data;
+
+      if (ctrlNext) {
+        if (out.length === 1) {
+          const c = out.toLowerCase().charCodeAt(0);
+          if (c >= 97 && c <= 122) {
+            out = String.fromCharCode(c - 96);
+          }
+        }
+        setCtrlActive(false);
+      }
+
+      if (altNext) {
+        out = '\u001b' + out;
+        setAltActive(false);
+      }
+
+      return out;
+    }
+
+    function sendResize() {
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
+    }
+
+    function fitNow() {
+      const vh = visibleHeight();
+      const topbarHeight = topbar.offsetHeight || 54;
+      const keybarHeight = keybar.offsetHeight || 40;
+
+      /*
+       * Keep terminal entirely above the Android keyboard.
+       * If this is still too low, increase keyboardReserve by 10.
+       */
+      const keyboardReserve = 10;
+      const terminalHeight = Math.max(120, Math.floor(vh - topbarHeight - keybarHeight - keyboardReserve));
+
+      document.documentElement.style.setProperty('--app-height', Math.floor(vh) + 'px');
+      document.documentElement.style.setProperty('--terminal-height', terminalHeight + 'px');
+
+      try {
+        fitAddon.fit();
+
+        const reservedRows = 4;
+        const safeRows = Math.max(3, term.rows - reservedRows);
+        if (safeRows !== term.rows) {
+          term.resize(term.cols, safeRows);
+        }
+
+        sendResize();
+        term.scrollToBottom();
+        term.focus();
+      } catch (err) {
+      }
+    }
+
+    function fitSoon() {
+      setTimeout(fitNow, 40);
+      setTimeout(fitNow, 180);
+      setTimeout(fitNow, 420);
+      setTimeout(fitNow, 900);
+    }
+
+    const scheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${scheme}//${window.location.host}/api/mobile/terminal?target=${encodeURIComponent(target)}&token=${encodeURIComponent(token)}`;
+
+    ws = new WebSocket(wsUrl);
+
+    ws.onopen = () => {
+      term.writeln(`Connecting to ${target}...`);
+      fitSoon();
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+
+        if (msg.type === 'output') {
+          term.write(msg.data || '', fitNow);
+          fitSoon();
+          return;
+        }
+
+        if (msg.type === 'status') {
+          term.writeln('');
+          term.writeln(msg.message || '');
+          fitSoon();
+          return;
+        }
+
+        if (msg.type === 'error') {
+          term.writeln('');
+          term.writeln('ERROR: ' + (msg.error || 'Terminal error'));
+          fitSoon();
+          return;
+        }
+
+        if (msg.type === 'closed') {
+          term.writeln('');
+          term.writeln('Terminal session closed.');
+          fitSoon();
+          return;
+        }
+      } catch (err) {
+        term.write(event.data, fitNow);
+        fitSoon();
+      }
+    };
+
+    ws.onclose = () => {
+      term.writeln('');
+      term.writeln('Disconnected.');
+      fitSoon();
+    };
+
+    ws.onerror = () => {
+      term.writeln('');
+      term.writeln('WebSocket error.');
+      fitSoon();
+    };
+
+    term.onData((data) => {
+      sendInput(applyModifierKeys(data));
+      term.scrollToBottom();
+      fitSoon();
+    });
+
+    function keepTerminalFocused(event) {
+      event.preventDefault();
+      event.stopPropagation();
+      term.focus();
+    }
+
+    ctrlBtn.addEventListener('pointerdown', keepTerminalFocused);
+    altBtn.addEventListener('pointerdown', keepTerminalFocused);
+
+    ctrlBtn.addEventListener('click', (event) => {
+      event.preventDefault();
+      setCtrlActive(!ctrlNext);
+      term.focus();
+      fitSoon();
+    });
+
+    altBtn.addEventListener('click', (event) => {
+      event.preventDefault();
+      setAltActive(!altNext);
+      term.focus();
+      fitSoon();
+    });
+
+    function specialKeyData(key) {
+      switch (key) {
+        case 'esc': return '\x1b';
+        case 'tab': return '\t';
+        case 'left': return '\x1b[D';
+        case 'right': return '\x1b[C';
+        case 'up': return '\x1b[A';
+        case 'down': return '\x1b[B';
+        case 'ctrl-c': return '\x03';
+        case 'ctrl-d': return '\x04';
+        default: return '';
+      }
+    }
+
+    document.querySelectorAll('[data-key]').forEach((button) => {
+      button.addEventListener('pointerdown', keepTerminalFocused);
+      button.addEventListener('click', (event) => {
+        event.preventDefault();
+        const data = specialKeyData(button.getAttribute('data-key'));
+        if (data) {
+          sendInput(data);
+        }
+        term.scrollToBottom();
+        term.focus();
+        fitSoon();
+      });
+    });
+
+    document.querySelectorAll('[data-command]').forEach((button) => {
+      button.addEventListener('pointerdown', keepTerminalFocused);
+      button.addEventListener('click', (event) => {
+        event.preventDefault();
+        if (button.getAttribute('data-command') === 'clear') {
+          sendInput('clear\r');
+        }
+        term.scrollToBottom();
+        term.focus();
+        fitSoon();
+      });
+    });
+
+    document.getElementById('exitBtn').addEventListener('click', () => {
+      try {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'exit' }));
+          ws.close();
+        }
+      } catch (err) {
+      }
+
+      if (window.AndroidTerminal && window.AndroidTerminal.close) {
+        window.AndroidTerminal.close();
+      } else if (window.closeTerminalFromAndroid) {
+        window.closeTerminalFromAndroid();
+      }
+    });
+
+    window.addEventListener('resize', fitSoon);
+
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', fitSoon);
+      window.visualViewport.addEventListener('scroll', fitSoon);
+    }
+
+    terminalEl.addEventListener('click', () => {
+      term.focus();
+      fitSoon();
+    });
+
+    window.closeTerminalFromAndroid = function () {
+      try {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'exit' }));
+          ws.close();
+        }
+      } catch (err) {
+      }
+    };
+
+    fitSoon();
+    setInterval(() => {
+      if (document.hasFocus()) {
+        fitNow();
+      }
+    }, 1000);
+  </script>
+</body>
+</html>

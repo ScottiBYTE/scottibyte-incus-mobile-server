@@ -15,17 +15,14 @@ function getBearerToken(req) {
   return match ? match[1].trim() : null;
 }
 
-function validateMobileToken(req, res, next) {
-  const token = getBearerToken(req);
+function validateMobileBearerTokenValue(token, ipAddress) {
+  const cleanToken = String(token || '').trim();
 
-  if (!token) {
-    return res.status(401).json({
-      ok: false,
-      error: 'Missing bearer token'
-    });
+  if (!cleanToken) {
+    return null;
   }
 
-  const tokenHash = hashToken(token);
+  const tokenHash = hashToken(cleanToken);
 
   const client = db.prepare(`
     SELECT
@@ -41,10 +38,7 @@ function validateMobileToken(req, res, next) {
   `).get(tokenHash);
 
   if (!client) {
-    return res.status(401).json({
-      ok: false,
-      error: 'Invalid or revoked token'
-    });
+    return null;
   }
 
   db.prepare(`
@@ -52,7 +46,28 @@ function validateMobileToken(req, res, next) {
     SET last_seen_at = ?,
         last_ip = ?
     WHERE id = ?
-  `).run(nowIso(), req.ip, client.id);
+  `).run(nowIso(), ipAddress || null, client.id);
+
+  return client;
+}
+
+function validateMobileToken(req, res, next) {
+  const token = getBearerToken(req);
+  const client = validateMobileBearerTokenValue(token, req.ip);
+
+  if (!token) {
+    return res.status(401).json({
+      ok: false,
+      error: 'Missing bearer token'
+    });
+  }
+
+  if (!client) {
+    return res.status(401).json({
+      ok: false,
+      error: 'Invalid or revoked token'
+    });
+  }
 
   req.mobileClient = client;
   next();
@@ -86,5 +101,6 @@ function allowAdminBypass(req, res, next) {
 
 module.exports = {
   requireMobileAuth,
-  allowAdminBypass
+  allowAdminBypass,
+  validateMobileBearerTokenValue
 };

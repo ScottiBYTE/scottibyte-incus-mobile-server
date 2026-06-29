@@ -5,6 +5,7 @@ const helmet = require('helmet');
 const cors = require('cors');
 const session = require('express-session');
 const path = require('path');
+const http = require('http');
 
 const { initDb } = require('./db');
 const mobileRoutes = require('./routes/mobile');
@@ -23,6 +24,7 @@ const {
 const { BetterSqliteSessionStore } = require('./sessionStore');
 const { ensureAuditTable } = require('./audit');
 const { seedDefaultOperations } = require('./operations');
+const { attachMobileTerminal } = require('./terminal');
 
 const app = express();
 const PORT = Number(process.env.PORT || 3088);
@@ -59,6 +61,9 @@ app.use(session({
   }
 }));
 
+app.use('/vendor/xterm', express.static(path.join(__dirname, 'node_modules/@xterm/xterm/lib')));
+app.use('/vendor/xterm-fit', express.static(path.join(__dirname, 'node_modules/@xterm/addon-fit/lib')));
+app.use(express.static(path.join(__dirname, 'public')));
 app.use('/public', express.static(path.join(__dirname, 'public')));
 
 app.get('/', adminAccessGuard, requireAdminAuth, (req, res) => {
@@ -92,6 +97,9 @@ app.get('/admin', adminAccessGuard, requireAdminAuth, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
 
-app.listen(PORT, () => {
+const server = http.createServer(app);
+attachMobileTerminal(server);
+
+server.listen(PORT, () => {
   console.log(`ScottiBYTE Incus Mobile Server listening on port ${PORT}`);
 });

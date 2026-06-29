@@ -11,6 +11,8 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^12.11.1",
     "cors": "^2.8.6",
@@ -19,8 +21,10 @@
     "express-session": "^1.19.0",
     "helmet": "^8.2.0",
     "nanoid": "^5.1.16",
+    "node-pty": "^1.1.0",
     "qrcode": "^1.5.4",
     "speakeasy": "^2.0.0",
-    "ssh2": "^1.17.0"
+    "ssh2": "^1.17.0",
+    "ws": "^8.21.0"
   }
 }

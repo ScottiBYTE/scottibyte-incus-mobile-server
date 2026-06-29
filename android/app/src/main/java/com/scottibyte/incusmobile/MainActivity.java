@@ -21,6 +21,9 @@ import android.view.View;
 import android.view.WindowManager;
 import android.view.inputmethod.InputMethodManager;
 import android.view.inputmethod.EditorInfo;
+import android.webkit.WebSettings;
+import android.webkit.JavascriptInterface;
+import android.webkit.WebView;
 
 import org.json.JSONObject;
 import org.json.JSONArray;
@@ -42,11 +45,17 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
+import okhttp3.WebSocket;
+import okhttp3.WebSocketListener;
+
 public class MainActivity extends Activity {
     private static final String PREF_SERVER_URL = "server_url";
     private static final String PREF_CLIENT_ROLE = "client_role";
     private static final String DEFAULT_API_BASE_URL = "";
-    private static final String APP_VERSION = "0.3.46";
+    private static final String APP_VERSION = "0.4.10";
     private static final String PREFS_NAME = "scottibyte_incus_mobile";
     private static final String PREF_DEVICE_ID = "device_id";
     private static final String PREF_BEARER_TOKEN = "bearer_token";
@@ -73,6 +82,14 @@ public class MainActivity extends Activity {
     private Button headerDetailsButton;
     private TextView headerDetailsView;
     private boolean headerDetailsVisible = false;
+    private boolean headerDetailsManuallyOpened = false;
+    private final Handler headerCollapseHandler = new Handler(Looper.getMainLooper());
+    private final Runnable headerCollapseRunnable = () -> {
+        if (hasServerUrl() && hasBearerToken() && !headerDetailsManuallyOpened) {
+            headerDetailsVisible = false;
+            updateHeaderDetailsView();
+        }
+    };
     private LinearLayout fixedActionBarLayout;
     private LinearLayout fixedFilterRowLayout;
     private Button clearInstanceFilterButton;
@@ -90,6 +107,17 @@ public class MainActivity extends Activity {
     private LinearLayout instanceCardsContainer;
     private TextView instanceDetailView;
     private LinearLayout selectedInstanceCardContainer;
+    private LinearLayout rootLayout;
+    private LinearLayout terminalLayout;
+    private TextView terminalTitleView;
+    private TextView terminalOutputView;
+    private EditText terminalInputView;
+    private ScrollView terminalScrollView;
+    private Button terminalExitButton;
+    private WebView terminalWebView;
+    private OkHttpClient terminalHttpClient;
+    private WebSocket terminalWebSocket;
+    private String terminalTargetId = "";
     private EditText serverFilterInput;
     private EditText instanceFilterInput;
     private JSONArray lastInstances = null;
@@ -120,7 +148,7 @@ public class MainActivity extends Activity {
         mobileClientRole = prefs.getString(PREF_CLIENT_ROLE, "unknown");
 ensureDeviceId();
 
-        LinearLayout rootLayout = new LinearLayout(this);
+        rootLayout = new LinearLayout(this);
         rootLayout.setOrientation(LinearLayout.VERTICAL);
         rootLayout.setFitsSystemWindows(false);
         rootLayout.setBackgroundColor(0xFF050716);
@@ -178,7 +206,9 @@ ensureDeviceId();
         headerDetailsButton.setLayoutParams(headerDetailsButtonParams);
 
         headerDetailsButton.setOnClickListener(v -> {
+            headerCollapseHandler.removeCallbacks(headerCollapseRunnable);
             headerDetailsVisible = !headerDetailsVisible;
+            headerDetailsManuallyOpened = headerDetailsVisible;
             updateHeaderDetailsView();
         });
 
@@ -657,6 +687,13 @@ ensureDeviceId();
             1
         ));
 
+        buildTerminalLayout();
+        rootLayout.addView(terminalLayout, new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            0,
+            1
+        ));
+
         setContentView(rootLayout);
 
         refreshTokenStatus();
@@ -668,6 +705,7 @@ ensureDeviceId();
         showServerListView();
 
         if (hasBearerToken() && hasServerUrl()) {
+            fetchMobileOperations();
             loadInstances();
         }
     }
@@ -978,6 +1016,7 @@ ensureDeviceId();
 
         refreshTokenStatus();
         updateAuthUiVisibility();
+        fetchMobileOperations();
         loadInstances();
     }
 
@@ -1556,13 +1595,15 @@ ensureDeviceId();
         }
     }
     private void collapseConnectionDetailsSoon() {
-        new Handler(Looper.getMainLooper()).postDelayed(() -> {
-            if (hasServerUrl() && hasBearerToken()) {
-                headerDetailsVisible = false;
-                updateHeaderDetailsView();
-            }
-        }, 2500);
+        headerCollapseHandler.removeCallbacks(headerCollapseRunnable);
+
+        if (headerDetailsManuallyOpened) {
+            return;
+        }
+
+        headerCollapseHandler.postDelayed(headerCollapseRunnable, 2500);
     }
+
     private String normalizeServerUrl(String value) {
         if (value == null) {
             return "";
@@ -1669,6 +1710,7 @@ ensureDeviceId();
         }
 
         boolean changed = !newUrl.equals(oldUrl);
+        headerDetailsManuallyOpened = false;
         apiBaseUrl = newUrl;
 
         SharedPreferences.Editor editor = prefs.edit();
@@ -2495,6 +2537,8 @@ ensureDeviceId();
                     }
 
                     runOnUiThread(() -> {
+                        updateClientIdentityFromResponse(json);
+
                         allowedOperations.clear();
                         allowedOperations.addAll(nextAllowed);
                         setConnectionStatus("Loaded " + allowedOperations.size() + " mobile operations.");
@@ -2517,6 +2561,296 @@ ensureDeviceId();
         }).start();
     }
 
+    private void buildTerminalLayout() {
+        terminalLayout = new LinearLayout(this);
+        terminalLayout.setOrientation(LinearLayout.VERTICAL);
+        terminalLayout.setBackgroundColor(0xFF020617);
+        terminalLayout.setPadding(8, 8, 8, 8);
+        terminalLayout.setVisibility(View.GONE);
+
+        LinearLayout header = new LinearLayout(this);
+        header.setOrientation(LinearLayout.HORIZONTAL);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+
+        terminalTitleView = new TextView(this);
+        terminalTitleView.setText("Shell");
+        terminalTitleView.setTextSize(18);
+        terminalTitleView.setTypeface(Typeface.DEFAULT_BOLD);
+        terminalTitleView.setTextColor(0xFFFFFFFF);
+
+        LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(
+            0,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            1
+        );
+        terminalTitleView.setLayoutParams(titleParams);
+
+        terminalExitButton = new Button(this);
+        terminalExitButton.setText("Exit");
+        terminalExitButton.setAllCaps(false);
+        terminalExitButton.setTextColor(0xFFFFFFFF);
+        terminalExitButton.setTextSize(14);
+        terminalExitButton.setPadding(24, 10, 24, 10);
+        terminalExitButton.setBackground(makeGlassBackground(0xCC7F1D1D, 0xAA450A0A, 0xFFF87171, 1, 18));
+        terminalExitButton.setOnClickListener(v -> closeTerminalSession("Terminal closed."));
+
+        header.addView(terminalTitleView);
+        header.addView(terminalExitButton);
+
+        terminalWebView = new WebView(this);
+        terminalWebView.setBackgroundColor(0xFF020617);
+        terminalWebView.setFocusable(true);
+        terminalWebView.setFocusableInTouchMode(true);
+
+        WebSettings settings = terminalWebView.getSettings();
+        settings.setJavaScriptEnabled(true);
+        settings.setDomStorageEnabled(true);
+        settings.setBuiltInZoomControls(false);
+        settings.setDisplayZoomControls(false);
+        settings.setLoadWithOverviewMode(false);
+        settings.setUseWideViewPort(false);
+
+        terminalWebView.addJavascriptInterface(new Object() {
+            @JavascriptInterface
+            public void close() {
+                runOnUiThread(() -> closeTerminalSession("Terminal closed."));
+            }
+        }, "AndroidTerminal");
+
+        LinearLayout.LayoutParams webParams = new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            0,
+            1
+        );
+        webParams.setMargins(0, 8, 0, 0);
+        terminalWebView.setLayoutParams(webParams);
+
+        // The WebView terminal page owns its own title, Exit button, keybar, and terminal.
+        // Keeping a native Android header here causes WebView/xterm keyboard resize errors.
+        terminalLayout.addView(terminalWebView);
+    }
+
+
+    private boolean isAdminRole() {
+        return "admin".equalsIgnoreCase(getClientRoleDisplay());
+    }
+
+    private boolean isContainer(JSONObject item) {
+        return item != null && "container".equalsIgnoreCase(item.optString("type", ""));
+    }
+
+    private boolean isRunning(JSONObject item) {
+        return item != null && "Running".equalsIgnoreCase(item.optString("status", ""));
+    }
+
+    private String buildTargetId(JSONObject item) {
+        if (item == null) {
+            return "";
+        }
+
+        String remote = item.optString("remote", "").trim();
+        String project = item.optString("project", "default").trim();
+        if (project.isEmpty()) {
+            project = "default";
+        }
+        String name = item.optString("name", item.optString("instance", item.optString("id", ""))).trim();
+
+        if (remote.isEmpty() || project.isEmpty() || name.isEmpty()) {
+            return "";
+        }
+
+        return remote + ":" + project + ":" + name;
+    }
+
+    private String terminalWebSocketUrl(String targetId, String token) throws Exception {
+        String base = getApiBaseUrl();
+
+        if (base.startsWith("https://")) {
+            base = "wss://" + base.substring("https://".length());
+        } else if (base.startsWith("http://")) {
+            base = "ws://" + base.substring("http://".length());
+        } else {
+            throw new IllegalStateException("Server URL must start with http:// or https://");
+        }
+
+        return base + "/api/mobile/terminal?target=" +
+            URLEncoder.encode(targetId, "UTF-8") +
+            "&token=" +
+            URLEncoder.encode(token, "UTF-8");
+    }
+
+    private String cleanTerminalOutput(String text) {
+        if (text == null) {
+            return "";
+        }
+
+        String cleaned = text;
+
+        /*
+         * The Android screen is currently a command-console TextView, not a full
+         * terminal emulator. Strip common ANSI/OSC/control sequences so shell
+         * output stays readable.
+         */
+        cleaned = cleaned.replaceAll("\\u001B\\][^\\u0007]*(\\u0007|\\u001B\\\\)", "");
+        cleaned = cleaned.replaceAll("\\u001B\\[[0-?]*[ -/]*[@-~]", "");
+        cleaned = cleaned.replaceAll("\\u001B[=>]", "");
+        cleaned = cleaned.replace("\\r\\n", "\\n");
+        cleaned = cleaned.replace("\\r", "\\n");
+
+        return cleaned;
+    }
+
+    private void appendTerminalOutput(String text) {
+        if (terminalOutputView == null) {
+            return;
+        }
+
+        String current = terminalOutputView.getText() == null
+            ? ""
+            : terminalOutputView.getText().toString();
+
+        String next = current + cleanTerminalOutput(text);
+
+        if (next.length() > 60000) {
+            next = next.substring(next.length() - 60000);
+        }
+
+        terminalOutputView.setText(next);
+
+        if (terminalScrollView != null) {
+            terminalScrollView.post(() -> terminalScrollView.fullScroll(View.FOCUS_DOWN));
+        }
+    }
+
+    private String terminalPageUrl(String targetId, String token) throws Exception {
+        String base = getApiBaseUrl();
+
+        if (!base.startsWith("http://") && !base.startsWith("https://")) {
+            throw new IllegalStateException("Server URL must start with http:// or https://");
+        }
+
+        return base + "/mobile-terminal.html?target=" +
+            URLEncoder.encode(targetId, "UTF-8") +
+            "&token=" +
+            URLEncoder.encode(token, "UTF-8");
+    }
+
+    private void openTerminalSession(JSONObject item) {
+        if (!isAdminRole()) {
+            showOperationMessage("Admin role required for shell access.");
+            return;
+        }
+
+        if (!isContainer(item)) {
+            showOperationMessage("Shell is only available for containers.");
+            return;
+        }
+
+        if (!isRunning(item)) {
+            showOperationMessage("Shell is only available for running containers.");
+            return;
+        }
+
+        String token = getBearerToken();
+        if (token == null || token.trim().isEmpty()) {
+            showOperationMessage("Not paired. Pair this device first.");
+            return;
+        }
+
+        String targetId = buildTargetId(item);
+        if (targetId.isEmpty()) {
+            showOperationMessage("Selected instance is missing remote, project, or name.");
+            return;
+        }
+
+        terminalTargetId = targetId;
+
+        if (terminalTitleView != null) {
+            terminalTitleView.setText("Shell: " + targetId);
+        }
+
+        if (fixedHeaderLayout != null) {
+            fixedHeaderLayout.setVisibility(View.GONE);
+        }
+
+        if (mainScrollView != null) {
+            mainScrollView.setVisibility(View.GONE);
+        }
+
+        if (terminalLayout != null) {
+            terminalLayout.setVisibility(View.VISIBLE);
+        }
+
+        try {
+            String url = terminalPageUrl(targetId, token);
+            terminalWebView.loadUrl(url);
+            terminalWebView.requestFocus();
+        } catch (Exception e) {
+            showOperationMessage("Terminal error: " + e.getMessage());
+        }
+    }
+
+
+    private void sendTerminalInput() {
+        if (terminalWebSocket == null) {
+            appendTerminalOutput("\nNot connected.\n");
+            return;
+        }
+
+        String command = terminalInputView == null || terminalInputView.getText() == null
+            ? ""
+            : terminalInputView.getText().toString();
+
+        if (command.trim().isEmpty()) {
+            return;
+        }
+
+        try {
+            JSONObject msg = new JSONObject();
+            msg.put("type", "input");
+            msg.put("data", command + "\n");
+            terminalWebSocket.send(msg.toString());
+
+            if (terminalInputView != null) {
+                terminalInputView.setText("");
+            }
+        } catch (Exception e) {
+            appendTerminalOutput("\nERROR: " + e.getMessage() + "\n");
+        }
+    }
+
+    private void closeTerminalSession(String message) {
+        try {
+            if (terminalWebView != null) {
+                terminalWebView.evaluateJavascript(
+                    "if (window.closeTerminalFromAndroid) { window.closeTerminalFromAndroid(); }",
+                    null
+                );
+                terminalWebView.loadUrl("about:blank");
+            }
+        } catch (Exception ignored) {
+        }
+
+        terminalTargetId = "";
+
+        if (terminalLayout != null) {
+            terminalLayout.setVisibility(View.GONE);
+        }
+
+        if (fixedHeaderLayout != null) {
+            fixedHeaderLayout.setVisibility(View.VISIBLE);
+        }
+
+        if (mainScrollView != null) {
+            mainScrollView.setVisibility(View.VISIBLE);
+        }
+
+        if (message != null && !message.trim().isEmpty()) {
+            showOperationMessage(message);
+        }
+    }
+
+
     private Button makeInstanceOperationButton(String label, String operation, JSONObject item) {
         Button button = new Button(this);
         button.setText(label);
@@ -2534,7 +2868,14 @@ ensureDeviceId();
         params.setMargins(0, 12, 10, 0);
         button.setLayoutParams(params);
 
-        button.setOnClickListener(v -> executeInstanceOperation(operation, item));
+        button.setOnClickListener(v -> {
+            if ("instance.shell".equals(operation)) {
+                openTerminalSession(item);
+                return;
+            }
+
+            executeInstanceOperation(operation, item);
+        });
 
         return button;
     }
@@ -2545,22 +2886,25 @@ ensureDeviceId();
         }
 
         String role = getClientRoleDisplay();
-        if (!"operator".equalsIgnoreCase(role) && !"admin".equalsIgnoreCase(role)) {
+        boolean operator = "operator".equalsIgnoreCase(role);
+        boolean admin = "admin".equalsIgnoreCase(role);
+
+        if (!operator && !admin) {
             return;
         }
 
-        String status = item.optString("status", "");
-        boolean running = "Running".equalsIgnoreCase(status);
+        boolean running = isRunning(item);
+        boolean container = isContainer(item);
 
-        // Operators/admins should see operation buttons based on instance state.
-        // The server remains the source of truth and will block execution when
-        // MOBILE_ACTIONS_ENABLED=false, the operation is disabled, the role is
-        // insufficient, or the instance is protected.
         boolean showStart = !running;
         boolean showStop = running;
         boolean showRestart = running;
+        boolean showShell = admin &&
+            running &&
+            container &&
+            hasAllowedOperation("instance.shell");
 
-        if (!showStart && !showStop && !showRestart) {
+        if (!showStart && !showStop && !showRestart && !showShell) {
             return;
         }
 
@@ -2579,8 +2923,13 @@ ensureDeviceId();
             row.addView(makeInstanceOperationButton("Restart", "instance.restart", item));
         }
 
+        if (showShell) {
+            row.addView(makeInstanceOperationButton("Shell", "instance.shell", item));
+        }
+
         card.addView(row);
     }
+
 
     private void showOperationMessage(String message) {
         setConnectionStatus(message);
@@ -2912,6 +3261,7 @@ ensureDeviceId();
     }
     @Override
     protected void onDestroy() {
+        closeTerminalSession("");
         stopPairingPolling();
         super.onDestroy();
     }

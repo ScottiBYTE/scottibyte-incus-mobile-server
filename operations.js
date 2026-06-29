@@ -113,6 +113,17 @@ function seedDefaultOperations() {
       runner_type: 'incus_cli',
       argv_template: ['restart', '{{target.remote}}:{{target.name}}', '--project', '{{target.project}}'],
       protected_target_policy: 'instance_name'
+    },
+    {
+      operation_key: 'instance.shell',
+      label: 'Shell',
+      description: 'Open an interactive shell into a running Incus container.',
+      enabled: false,
+      role_required: 'admin',
+      target_type: 'instance',
+      runner_type: 'websocket_terminal',
+      argv_template: ['shell', '{{target.remote}}:{{target.name}}', '--project', '{{target.project}}'],
+      protected_target_policy: 'instance_name'
     }
   ];
 

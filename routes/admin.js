@@ -297,15 +297,15 @@ router.post('/clients/:id/role', (req, res) => {
   const id = Number(req.params.id);
   const requestedRole = String(req.body.role || '').trim();
 
-  if (!['viewer', 'operator'].includes(requestedRole)) {
+  if (!['viewer', 'operator', 'admin'].includes(requestedRole)) {
     return res.status(400).json({
       ok: false,
-      error: 'Role must be viewer or operator'
+      error: 'Role must be viewer, operator, or admin'
     });
   }
 
   const client = db.prepare(`
-    SELECT id, device_id, device_name, display_name, role
+    SELECT id, device_id, device_name, display_name, status, role
     FROM mobile_clients
     WHERE id = ?
   `).get(id);
@@ -317,6 +317,13 @@ router.post('/clients/:id/role', (req, res) => {
     });
   }
 
+  if (client.status !== 'approved') {
+    return res.status(400).json({
+      ok: false,
+      error: 'Only approved clients can have their active role changed. Restore/reapprove the client first.'
+    });
+  }
+
   db.prepare(`
     UPDATE mobile_clients
     SET role = ?
@@ -325,11 +332,11 @@ router.post('/clients/:id/role', (req, res) => {
 
   logAuditEvent({
     ...getAdminActor(req),
-    event_type: 'client.role_change',
+    event_type: 'client.role.changed',
     target_type: 'mobile_client',
     target_id: String(id),
     result: 'success',
-    message: `Changed mobile client role to ${requestedRole}`,
+    message: `Changed mobile client role from ${client.role} to ${requestedRole}`,
     metadata: {
       device_id: client.device_id,
       device_name: client.device_name,

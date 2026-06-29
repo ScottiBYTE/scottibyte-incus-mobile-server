@@ -104,6 +104,7 @@ function statusBubble(status) {
 }
 
 function roleBubble(role) {
+  if (role === 'admin') return bubble(role, 'warn');
   if (role === 'operator') return bubble(role, 'purple');
   if (role === 'viewer') return bubble(role, 'remote');
   return bubble(role || '-', 'neutral');
@@ -599,6 +600,27 @@ function clientTokenStatusText(c) {
   return 'Token: unknown';
 }
 
+
+function renderClientRoleActions(c) {
+  if (!c || c.status !== 'approved') {
+    return '';
+  }
+
+  const roles = [
+    { role: 'viewer', label: 'Set Viewer' },
+    { role: 'operator', label: 'Set Operator' },
+    { role: 'admin', label: 'Set Admin' }
+  ];
+
+  return roles
+    .filter((entry) => entry.role !== c.role)
+    .map((entry) => `
+      <button class="btn" onclick="setClientRole(${c.id}, '${entry.role}', this)">${entry.label}</button>
+    `)
+    .join('');
+}
+
+
 function renderClients() {
   const rows = sortRows(state.clients, state.clientSort);
 
@@ -625,6 +647,7 @@ function renderClients() {
             <button class="btn primary" onclick="approveClient(${c.id}, 'operator', this)">Approve Operator</button>
           ` : ''}
           ${c.status === 'approved' ? `
+            ${renderClientRoleActions(c)}
             <button class="btn danger" onclick="revokeClient(${c.id})">Revoke</button>
           ` : ''}
           ${c.status === 'revoked' ? `
@@ -795,6 +818,32 @@ async function approveClient(id, role, btn) {
     }
 
     await fetchJson(`/api/admin/clients/${id}/approve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role })
+    });
+
+    await refreshClientsOnly();
+    await loadAudit();
+  } catch (err) {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = originalText;
+    }
+    alert(err.message);
+  }
+}
+
+async function setClientRole(id, role, btn) {
+  const originalText = btn ? btn.textContent : '';
+
+  try {
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Changing...';
+    }
+
+    await fetchJson(`/api/admin/clients/${id}/role`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ role })
