@@ -110,6 +110,30 @@ function listAuditEvents(limit = 50) {
   }));
 }
 
+function listAuditEventsForExport(limit = 5000) {
+  ensureAuditTable();
+
+  const safeLimit = Math.max(1, Math.min(Number(limit || 5000), 50000));
+
+  return db.prepare(`
+    SELECT
+      id,
+      created_at,
+      actor_type,
+      actor_id,
+      actor_name,
+      event_type,
+      target_type,
+      target_id,
+      result,
+      message,
+      metadata_json
+    FROM audit_events
+    ORDER BY id DESC
+    LIMIT ?
+  `).all(safeLimit);
+}
+
 function getAdminActor(req) {
   return {
     actor_type: 'admin',
@@ -122,5 +146,6 @@ module.exports = {
   ensureAuditTable,
   logAuditEvent,
   listAuditEvents,
+  listAuditEventsForExport,
   getAdminActor
 };
