@@ -46,7 +46,7 @@ public class MainActivity extends Activity {
     private static final String PREF_SERVER_URL = "server_url";
     private static final String PREF_CLIENT_ROLE = "client_role";
     private static final String DEFAULT_API_BASE_URL = "";
-    private static final String APP_VERSION = "0.3.26";
+    private static final String APP_VERSION = "0.3.36";
     private static final String PREFS_NAME = "scottibyte_incus_mobile";
     private static final String PREF_DEVICE_ID = "device_id";
     private static final String PREF_BEARER_TOKEN = "bearer_token";
@@ -91,6 +91,7 @@ public class MainActivity extends Activity {
     private EditText instanceFilterInput;
     private JSONArray lastInstances = null;
     private String selectedInstanceKey = "";
+    private JSONObject lastSelectedInstance = null;
     private final HashSet<String> allowedOperations = new HashSet<>();
     private boolean suppressFilterEvents = false;
     private EditText deviceNameInput;
@@ -354,7 +355,8 @@ ensureDeviceId();
 
         summaryButton = new Button(this);
         summaryButton.setText("Refresh");
-        summaryButton.setOnClickListener(v -> loadAuthorizedHome());
+        summaryButton.setOnClickListener(v -> refreshMobileData());
+        styleBubbleButton(summaryButton);
         summaryButton.setVisibility(View.GONE);
 
         instancesButton = new Button(this);
@@ -388,6 +390,7 @@ ensureDeviceId();
 
         backToInstancesButton.setOnClickListener(v -> {
             selectedInstanceKey = "";
+            lastSelectedInstance = null;
             showServerDrilldownView();
             renderInstancesList();
         });
@@ -739,7 +742,7 @@ ensureDeviceId();
         }
 
         if (summaryButton != null) {
-            summaryButton.setVisibility(View.GONE);
+            summaryButton.setVisibility(authorized ? View.VISIBLE : View.GONE);
         }
 
         if (instancesButton != null) {
@@ -1073,6 +1076,25 @@ ensureDeviceId();
     }
 
 
+    private void refreshMobileData() {
+        showOperationMessage("Refreshing server data...");
+        fetchMobileOperations();
+
+        /*
+         * If the user is looking at a selected instance, avoid full home/server
+         * repaint. Refresh only instance data so the selected card can update
+         * in place.
+         */
+        if (selectedInstanceKey != null && !selectedInstanceKey.trim().isEmpty()) {
+            loadInstances();
+            return;
+        }
+
+        loadAuthorizedHome();
+        loadInstances();
+    }
+
+
     private void loadAuthorizedHome() {
         String token = getBearerToken();
 
@@ -1214,9 +1236,33 @@ ensureDeviceId();
                 setStatus("Servers updated.");
         collapseConnectionDetailsSoon();
             } else {
-                showServerDrilldownView();
                 renderRemoteSummary();
                 renderInstancesList();
+
+                JSONObject selectedAfterRefresh = findSelectedInstanceObject();
+
+                if (selectedInstanceKey != null && !selectedInstanceKey.trim().isEmpty() && selectedAfterRefresh != null) {
+                    showInstanceDetailView();
+                    setInstanceDetail(selectedAfterRefresh);
+                } else if (selectedInstanceKey != null && !selectedInstanceKey.trim().isEmpty()) {
+                    showInstanceDetailView();
+
+                    if (selectedInstanceCardContainer != null) {
+                        selectedInstanceCardContainer.removeAllViews();
+
+                        TextView missing = new TextView(this);
+                        missing.setText("Selected instance was not found after refresh.");
+                        missing.setTextSize(14);
+                        missing.setTextColor(0xFFD1D5DB);
+                        missing.setPadding(20, 18, 20, 18);
+
+                        selectedInstanceCardContainer.addView(missing);
+                        selectedInstanceCardContainer.setVisibility(View.VISIBLE);
+                    }
+                } else {
+                    showServerDrilldownView();
+                }
+
                 setConnectionStatus("");
                 setStatus("Instances updated.");
         collapseConnectionDetailsSoon();
@@ -1946,7 +1992,17 @@ ensureDeviceId();
 
                 instancesView.setText(out.toString());
                 renderInstanceCards(matchedInstances);
-                setInstanceDetail(null);
+
+                /*
+                 * Do not clear the selected instance while refreshing the list.
+                 * Operation refresh and manual Refresh both call renderInstancesList().
+                 * If a container is selected, the selected-detail refresh path will
+                 * re-bind that card. Clearing here causes the "No instance selected"
+                 * screen after Start/Stop/Restart.
+                 */
+                if (selectedInstanceKey == null || selectedInstanceKey.trim().isEmpty()) {
+                    setInstanceDetail(null);
+                }
             } catch (Exception e) {
                 instancesView.setText("\nUnable to render instances.");
                 setStatus(errorText(e));
@@ -1959,12 +2015,25 @@ ensureDeviceId();
             return "";
         }
 
-        String remote = item.optString("remote", "");
-        String project = item.optString("project", "");
-        String name = item.optString("name", item.optString("instance", item.optString("id", "")));
+        String remote = item.optString("remote", "").trim();
+        String project = item.optString("project", "default").trim();
+        if (project.isEmpty()) {
+            project = "default";
+        }
 
+        String name = item.optString("name",
+            item.optString("instance",
+                item.optString("id", "")
+            )
+        ).trim();
+
+        /*
+         * Stable across Start / Stop / Restart.
+         * Never include status, type, location, or display text here.
+         */
         return remote + ":" + project + ":" + name;
     }
+
 
     private void renderInstanceCards(ArrayList<JSONObject> instances) {
         if (instanceCardsContainer == null) {
@@ -2060,6 +2129,7 @@ ensureDeviceId();
             card.setFocusable(true);
             card.setOnClickListener(v -> {
                 selectedInstanceKey = getInstanceKey(item);
+                lastSelectedInstance = item;
                 setInstanceDetail(item);
                 showInstanceDetailView();
             });
@@ -2077,13 +2147,42 @@ ensureDeviceId();
         }
 
         try {
+            String selected = selectedInstanceKey.trim();
+
+            String[] selectedParts = selected.split(":", 3);
+            String selectedRemote = selectedParts.length > 0 ? selectedParts[0] : "";
+            String selectedProject = selectedParts.length > 1 ? selectedParts[1] : "default";
+            String selectedName = selectedParts.length > 2 ? selectedParts[2] : "";
+
+            if (selectedProject == null || selectedProject.trim().isEmpty()) {
+                selectedProject = "default";
+            }
+
             for (int i = 0; i < lastInstances.length(); i++) {
                 JSONObject item = lastInstances.optJSONObject(i);
                 if (item == null) {
                     continue;
                 }
 
-                if (selectedInstanceKey.equals(getInstanceKey(item))) {
+                String key = getInstanceKey(item);
+                if (selected.equals(key)) {
+                    return item;
+                }
+
+                String remote = item.optString("remote", "").trim();
+                String project = item.optString("project", "default").trim();
+                if (project.isEmpty()) {
+                    project = "default";
+                }
+
+                String name = item.optString("name",
+                    item.optString("instance",
+                        item.optString("id", "")
+                    )
+                ).trim();
+
+                // Fallback: remote + name is stable even if project was missing earlier.
+                if (remote.equals(selectedRemote) && name.equals(selectedName)) {
                     return item;
                 }
             }
@@ -2096,10 +2195,23 @@ ensureDeviceId();
 
     private void refreshSelectedInstanceCard() {
         JSONObject selected = findSelectedInstanceObject();
+
         if (selected != null) {
+            lastSelectedInstance = selected;
+            selectedInstanceKey = getInstanceKey(selected);
             renderSelectedInstanceCard(selected);
+            return;
+        }
+
+        /*
+         * Do not blank the selected instance screen just because a refresh has
+         * not re-bound the object yet. Keep the last known selected card visible.
+         */
+        if (lastSelectedInstance != null) {
+            renderSelectedInstanceCard(lastSelectedInstance);
         }
     }
+
 
     private boolean hasAllowedOperation(String operation) {
         return allowedOperations.contains(operation);
@@ -2239,6 +2351,38 @@ ensureDeviceId();
         }
     }
 
+    private void applyOptimisticInstanceStatus(String operation, JSONObject item) {
+        if (item == null) {
+            return;
+        }
+
+        try {
+            if ("instance.stop".equals(operation)) {
+                item.put("status", "Stopped");
+            } else if ("instance.start".equals(operation) || "instance.restart".equals(operation)) {
+                item.put("status", "Running");
+            }
+
+            lastSelectedInstance = item;
+            selectedInstanceKey = getInstanceKey(item);
+            showInstanceDetailView();
+            setInstanceDetail(item);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void refreshAfterInstanceOperation(String message) {
+        /*
+         * Refresh silently after Start/Stop/Restart.
+         * The operation result toast has already been shown, and the selected
+         * card is updated optimistically before this method runs.
+         */
+        setStatus(message + ". Refreshing instance state...");
+        fetchMobileOperations();
+        loadInstances();
+    }
+
+
     private void executeInstanceOperation(String operation, JSONObject item) {
         if (item == null) {
             showOperationMessage("No instance selected.");
@@ -2287,8 +2431,8 @@ ensureDeviceId();
 
                 runOnUiThread(() -> {
                     if (result.code >= 200 && result.code < 300 && finalJson != null && finalJson.optBoolean("ok")) {
-                        showOperationMessage("Operation completed: " + operation);
-                        loadAuthorizedHome();
+                        applyOptimisticInstanceStatus(operation, item);
+                        refreshAfterInstanceOperation("Operation completed: " + operation);
                         return;
                     }
 
