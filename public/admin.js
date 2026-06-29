@@ -119,6 +119,47 @@ function metricBubble(value) {
 }
 
 
+
+function displayClientStatus(status) {
+  const value = String(status || '').trim().toLowerCase();
+
+  if (value === 'approved') return 'authorized';
+  if (value === 'pending') return 'pending';
+  if (value === 'revoked') return 'revoked';
+
+  return status || '-';
+}
+
+function displayAuditEventName(eventType) {
+  const value = String(eventType || '').trim();
+
+  const labels = {
+    'remote.test': 'Server test',
+    'operation.request': 'Operation requested',
+    'operation.success': 'Operation completed',
+    'operation.blocked': 'Operation blocked',
+    'operation.failed': 'Operation failed',
+    'terminal.opened': 'Terminal opened',
+    'terminal.closed': 'Terminal closed',
+    'client.approved': 'Client authorized',
+    'client.revoked': 'Client revoked',
+    'client.role.changed': 'Client role changed',
+    'client.renamed': 'Client renamed',
+    'mobile_actions.changed': 'Mobile actions changed',
+    'operation_definition.enabled': 'Operation enabled setting changed',
+    'operation_definition.role': 'Operation role changed'
+  };
+
+  return labels[value] || value || '-';
+}
+
+function displayAuditMessage(message) {
+  return String(message || '')
+    .replace(/^Remote /, 'Server ')
+    .replace(/\bremote\b/g, 'server')
+    .replace(/\bremotes\b/g, 'servers');
+}
+
 function renderStatus() {
   const actionsEl = $('actionsStatus');
 
@@ -149,13 +190,31 @@ function renderSummary() {
   $('containersTotal').textContent = s.containers_total ?? '-';
   $('vmsTotal').textContent = s.virtual_machines_total ?? '-';
   const errorsEl = $('errorsTotal');
-  errorsEl.textContent = s.errors ?? '-';
-  errorsEl.classList.toggle('has-errors', Number(s.errors || 0) > 0);
+  const totalRemotes = Array.isArray(state.remotes) ? state.remotes.length : 0;
+  const testedRemoteNames = Object.keys(state.remoteTests || {});
+  const onlineRemotes = testedRemoteNames.filter((name) => state.remoteTests[name]?.reachable === true).length;
+  const testedRemotes = testedRemoteNames.length;
+
+  if (!totalRemotes) {
+    errorsEl.textContent = '-';
+    errorsEl.classList.remove('has-errors');
+  } else if (testedRemotes < totalRemotes) {
+    errorsEl.textContent = 'Checking';
+    errorsEl.classList.remove('has-errors');
+  } else {
+    errorsEl.textContent = `${onlineRemotes} / ${totalRemotes} Online`;
+    errorsEl.classList.toggle('has-errors', onlineRemotes < totalRemotes);
+  }
 
   const summaryCards = $('summaryCards');
   if (summaryCards) {
     const errorCard = summaryCards.children[5];
-    if (errorCard) errorCard.classList.toggle('has-errors', Number(s.errors || 0) > 0);
+    if (errorCard) {
+      errorCard.classList.toggle(
+        'has-errors',
+        totalRemotes > 0 && testedRemotes >= totalRemotes && onlineRemotes < totalRemotes
+      );
+    }
   }
 }
 
@@ -167,7 +226,7 @@ function renderRemotes() {
     const test = state.remoteTests[r.name];
     const status = test
       ? (test.reachable ? statusBubble('Online') : statusBubble('Offline'))
-      : statusBubble('Not tested');
+      : bubble('Checking', 'neutral');
 
     const count = test && test.reachable ? test.instances_count : '-';
 
@@ -182,7 +241,6 @@ function renderRemotes() {
         <td>${escapeHtml(count)}</td>
         <td>
           <div class="actions">
-            <button class="btn" onclick="testRemote('${escapeHtml(r.name)}')">Test</button>
             <button class="btn danger" onclick="deleteRemote('${escapeHtml(r.name)}')">Delete</button>
           </div>
         </td>
@@ -198,6 +256,7 @@ function renderRemotes() {
   renderIgnoredRemotes();
   updateSortIndicators('remotesTable', state.remoteSort);
   reapplyTableSelection('remotesTable');
+  autoTestRemotes();
 }
 
 function renderIgnoredRemotes() {
@@ -219,12 +278,52 @@ function renderIgnoredRemotes() {
   `).join('');
 }
 
+
+function autoTestRemotes() {
+  if (!state.remoteAutoTests) {
+    state.remoteAutoTests = {};
+  }
+
+  state.remotes.forEach((remote) => {
+    const name = remote?.name;
+    if (!name) return;
+
+    if (state.remoteTests[name] || state.remoteAutoTests[name]) {
+      return;
+    }
+
+    state.remoteAutoTests[name] = true;
+
+    fetchJson(`/api/admin/remotes/${encodeURIComponent(name)}/test`, {
+      method: 'POST'
+    })
+      .then((data) => {
+        state.remoteTests[name] = data.test || {
+          reachable: false,
+          error: 'No test result returned'
+        };
+      })
+      .catch((err) => {
+        state.remoteTests[name] = {
+          reachable: false,
+          error: err.message || 'Server test failed'
+        };
+      })
+      .finally(() => {
+        delete state.remoteAutoTests[name];
+        renderRemotes();
+        renderSummary();
+      });
+  });
+}
+
+
 function renderRemoteFilter() {
   const select = $('remoteFilter');
   const current = select.value;
   const remotes = [...new Set(state.instances.map((i) => i.remote).filter(Boolean))].sort();
 
-  select.innerHTML = '<option value="">All remotes</option>' +
+  select.innerHTML = '<option value="">All servers</option>' +
     remotes.map((r) => `<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join('');
 
   if (remotes.includes(current)) select.value = current;
@@ -310,10 +409,10 @@ function renderAudit(events) {
       <tr>
         <td>${escapeHtml(event.created_at || '-')}</td>
         <td>${bubble(actor, 'remote')}</td>
-        <td>${escapeHtml(event.event_type || '-')}</td>
+        <td>${escapeHtml(displayAuditEventName(event.event_type || '-'))}</td>
         <td>${escapeHtml(target)}</td>
         <td>${bubble(event.result || '-', resultType)}</td>
-        <td>${escapeHtml(event.message || '-')}</td>
+        <td>${escapeHtml(displayAuditMessage(event.message || '-'))}</td>
       </tr>
     `;
   }).join('');
@@ -619,7 +718,7 @@ function renderClients() {
         </span>
       </td>
       <td>
-        ${statusBubble(c.status)}<br>
+        ${statusBubble(displayClientStatus(c.status))}<br>
         <span class="note">${escapeHtml(clientTokenStatusText(c))}</span>
       </td>
       <td>${roleBubble(c.role)}</td>
@@ -708,7 +807,7 @@ async function addRemote() {
   };
 
   if (!payload.name || !payload.host || !payload.ssh_user) {
-    alert('Remote name, Incus host/address, and SSH user are required.');
+    alert('Server name, Incus host/address, and SSH user are required.');
     return;
   }
 
@@ -728,7 +827,7 @@ async function addRemote() {
   } finally {
     $('addRemoteSshPassword').value = '';
     btn.disabled = false;
-    btn.textContent = 'Add Remote';
+    btn.textContent = 'Add Server';
   }
 }
 
@@ -751,12 +850,12 @@ async function testRemote(name) {
 
 async function deleteRemote(name) {
   const message = [
-    `Delete Incus remote "${name}" from this server?`,
+    `Delete Incus server "${name}" from this server?`,
     '',
-    'This removes the remote from the Incus client configuration used by this app.',
-    'It does not delete containers, VMs, or the remote Incus server.',
+    'This removes the server from the Incus client configuration used by this app.',
+    'It does not delete containers, VMs, or the Incus server.',
     '',
-    `Type the remote name to confirm: ${name}`
+    `Type the server name to confirm: ${name}`
   ].join("\n");
 
   const confirmation = prompt(message);
@@ -888,6 +987,8 @@ async function loadData() {
     state.appTimeZone = health.app_time_zone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
     state.summary = summaryData.summary || {};
     state.remotes = normalizeRemotes(remotesData);
+    state.remoteTests = {};
+    state.remoteAutoTests = {};
     state.ignoredRemotes = remotesData.ignored || [];
     state.instances = instancesData.instances || [];
     state.clients = clientsData.clients || [];
@@ -1133,7 +1234,7 @@ async function refreshRemotesOnly() {
     if (btn) {
       btn.textContent = 'Updated';
       setTimeout(() => {
-        btn.textContent = 'Refresh Remotes';
+        btn.textContent = 'Refresh Servers';
         btn.disabled = false;
       }, 1200);
     }
@@ -1141,7 +1242,7 @@ async function refreshRemotesOnly() {
     if (btn) {
       btn.textContent = 'Refresh Failed';
       setTimeout(() => {
-        btn.textContent = 'Refresh Remotes';
+        btn.textContent = 'Refresh Servers';
         btn.disabled = false;
       }, 1800);
     }
@@ -1218,58 +1319,13 @@ document.addEventListener('DOMContentLoaded', init);
  * Final V1.0 Mobile Role Policy renderer.
  * This intentionally overrides earlier development-operation renderers.
  */
-function renderOperations() {
-  const el = $('rolePolicyCards');
-  if (!el) {
-    return;
-  }
 
-  el.innerHTML = `
-    <div class="role-policy-grid">
-      <div class="policy-card">
-        <div class="policy-role viewer">Viewer</div>
-        <div class="policy-title">Read-only inventory access</div>
-        <div class="policy-text">
-          Viewers can see configured remotes, instances, status, IP addresses, and inventory details.
-          They cannot start, stop, restart, or open shell sessions.
-        </div>
-      </div>
 
-      <div class="policy-card">
-        <div class="policy-role operator">Operator</div>
-        <div class="policy-title">Instance power control</div>
-        <div class="policy-text">
-          Operators can start, stop, and restart Incus containers and virtual machines.
-          They do not have shell access.
-        </div>
-      </div>
 
-      <div class="policy-card">
-        <div class="policy-role admin">Admin</div>
-        <div class="policy-title">Full mobile operations</div>
-        <div class="policy-text">
-          Admins can start, stop, restart, and open shell sessions into running Incus containers.
-          Shell access is restricted to admins only.
-        </div>
-      </div>
 
-      <div class="policy-card global">
-        <div class="policy-role global">Global Mobile Actions</div>
-        <div class="policy-title">Master safety switch</div>
-        <div class="policy-text">
-          When disabled, no mobile client receives action buttons and the server rejects all mobile
-          start, stop, restart, and shell requests. Inventory remains read-only.
-        </div>
-      </div>
-    </div>
-  `;
 
-  renderMobileActionsStatus();
-}
 
-function renderOperationsPreview() {
-  state.operationsPreview = [];
-}
+
 
 async function loadOperationsPreview() {
   state.operationsPreview = [];
@@ -1363,7 +1419,101 @@ function renderMobileActionsStatus() {
 /*
  * Final V1.0 Mobile Role Policy renderer.
  */
-function renderOperations() {
+
+
+
+
+
+
+async function loadOperationsPreview() {
+  state.operationsPreview = [];
+}
+
+
+/*
+ * Final hard override for V1.0 Mobile Role Policy UI.
+ * Do not remove: loadData() and global switch updates call these names directly.
+ */
+window.renderMobileActionsStatus = function renderMobileActionsStatus() {
+  const anchor = $('rolePolicyCards');
+  if (!anchor || !anchor.parentElement) {
+    return;
+  }
+
+  let panel = $('mobileActionsPanel');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'mobileActionsPanel';
+    panel.style.display = 'flex';
+    panel.style.alignItems = 'center';
+    panel.style.justifyContent = 'space-between';
+    panel.style.gap = '12px';
+    panel.style.flexWrap = 'wrap';
+    panel.style.margin = '10px 0 18px 0';
+    panel.style.padding = '12px';
+    panel.style.border = '1px solid rgba(56, 189, 248, 0.35)';
+    panel.style.borderRadius = '12px';
+    panel.style.background = 'rgba(14, 165, 233, 0.08)';
+
+    anchor.parentElement.insertBefore(panel, anchor);
+  }
+
+  const status = state.mobileActions;
+
+  if (!status) {
+    panel.innerHTML = `
+      <div>
+        <strong>Global Mobile Actions</strong><br>
+        <span class="note">Master switch for all mobile Start, Stop, Restart, and Shell actions.</span>
+      </div>
+      <div class="actions" style="align-items:center;">
+        ${bubble('Loading', 'neutral')}
+      </div>
+    `;
+
+    fetchJson('/api/admin/mobile-actions')
+      .then((data) => {
+        state.mobileActions = data.mobile_actions || null;
+        window.renderMobileActionsStatus();
+      })
+      .catch((err) => {
+        panel.innerHTML = `
+          <div>
+            <strong>Global Mobile Actions</strong><br>
+            <span class="note bad">Could not load global mobile actions status: ${escapeHtml(err.message || err)}</span>
+          </div>
+          <div class="actions" style="align-items:center;">
+            ${bubble('Error', 'bad')}
+          </div>
+        `;
+      });
+
+    return;
+  }
+
+  const effective = status.effective_enabled === true;
+  const hardEnabled = status.hard_enabled === true;
+  const serverEnabled = status.server_enabled === true;
+  const nextEnabled = !serverEnabled;
+  const buttonLabel = serverEnabled ? 'Disable All Mobile Actions' : 'Enable All Mobile Actions';
+
+  panel.innerHTML = `
+    <div>
+      <strong>Global Mobile Actions</strong><br>
+      <span class="note">Master switch for all mobile Start, Stop, Restart, and Shell actions.</span>
+    </div>
+    <div class="actions" style="align-items:center;">
+      ${bubble(effective ? 'Enabled' : 'Disabled', effective ? 'good' : 'bad')}
+      <button
+        class="btn ${serverEnabled ? 'danger' : 'primary'}"
+        onclick="setGlobalMobileActionsEnabled(${nextEnabled})"
+        ${hardEnabled ? '' : 'disabled title="MOBILE_ACTIONS_ENABLED=false in .env is the hard safety override"'}
+      >${escapeHtml(buttonLabel)}</button>
+    </div>
+  `;
+};
+
+window.renderOperations = function renderOperations() {
   const el = $('rolePolicyCards');
   if (!el) {
     return;
@@ -1374,6 +1524,9 @@ function renderOperations() {
       <div class="policy-card">
         <div class="policy-role viewer">Viewer</div>
         <div class="policy-title">Read-only inventory access</div>
+        <div class="capability-row">
+          <span class="capability-pill viewer">Read-only</span>
+        </div>
         <div class="policy-text">
           Viewers can see configured remotes, instances, status, IP addresses, and inventory details.
           They cannot start, stop, restart, or open shell sessions.
@@ -1383,6 +1536,11 @@ function renderOperations() {
       <div class="policy-card">
         <div class="policy-role operator">Operator</div>
         <div class="policy-title">Instance power control</div>
+        <div class="capability-row">
+          <span class="capability-pill operator">Start</span>
+          <span class="capability-pill operator">Stop</span>
+          <span class="capability-pill operator">Restart</span>
+        </div>
         <div class="policy-text">
           Operators can start, stop, and restart Incus containers and virtual machines.
           They do not have shell access.
@@ -1392,6 +1550,12 @@ function renderOperations() {
       <div class="policy-card">
         <div class="policy-role admin">Admin</div>
         <div class="policy-title">Full mobile operations</div>
+        <div class="capability-row">
+          <span class="capability-pill admin">Start</span>
+          <span class="capability-pill admin">Stop</span>
+          <span class="capability-pill admin">Restart</span>
+          <span class="capability-pill console">Console</span>
+        </div>
         <div class="policy-text">
           Admins can start, stop, restart, and open shell sessions into running Incus containers.
           Shell access is restricted to admins only.
@@ -1401,6 +1565,10 @@ function renderOperations() {
       <div class="policy-card global">
         <div class="policy-role global">Global Mobile Actions</div>
         <div class="policy-title">Master safety switch</div>
+        <div class="capability-row">
+          <span class="capability-pill global">Enable All</span>
+          <span class="capability-pill danger">Disable All</span>
+        </div>
         <div class="policy-text">
           When disabled, no mobile client receives action buttons and the server rejects all mobile
           start, stop, restart, and shell requests. Inventory remains read-only.
@@ -1409,13 +1577,13 @@ function renderOperations() {
     </div>
   `;
 
-  renderMobileActionsStatus();
-}
+  window.renderMobileActionsStatus();
+};
 
-function renderOperationsPreview() {
+window.renderOperationsPreview = function renderOperationsPreview() {
   state.operationsPreview = [];
-}
+};
 
-async function loadOperationsPreview() {
+window.loadOperationsPreview = async function loadOperationsPreview() {
   state.operationsPreview = [];
-}
+};

@@ -37,8 +37,8 @@
       <div id="statusCards" class="cards">
         <div class="card"><span>Admin Console Access</span><strong id="adminAccessStatus">LAN/VPN Only</strong></div>
         <div class="card"><span>Instance Actions</span><strong id="actionsStatus">Loading</strong></div>
-        <div class="card"><span>Managed Remotes</span><strong id="remoteCount">-</strong></div>
-        <div class="card"><span>Approved Clients</span><strong id="approvedClientCount">-</strong></div>
+        <div class="card"><span>Managed Incus Servers</span><strong id="remoteCount">-</strong></div>
+        <div class="card"><span>Authorized Clients</span><strong id="approvedClientCount">-</strong></div>
         <div class="card"><span>Pending Clients</span><strong id="pendingClientCount">-</strong></div>
       </div>
     </section>
@@ -47,7 +47,7 @@
       <div class="panel-heading">
         <div>
           <h2>Instance Summary</h2>
-          <p>At-a-glance inventory across configured Incus remotes.</p>
+          <p>At-a-glance inventory across configured Incus servers.</p>
         </div>
       </div>
 
@@ -57,7 +57,7 @@
         <div class="card"><span>Stopped</span><strong id="stoppedTotal">-</strong></div>
         <div class="card"><span>Containers</span><strong id="containersTotal">-</strong></div>
         <div class="card"><span>Virtual Machines</span><strong id="vmsTotal">-</strong></div>
-        <div class="card"><span>Errors</span><strong id="errorsTotal">-</strong></div>
+        <div class="card"><span>Incus Servers</span><strong id="errorsTotal">-</strong></div>
       </div>
     </section>
 
@@ -67,15 +67,15 @@
       <section class="panel">
         <div class="panel-heading">
           <div>
-            <h2>Remote Management</h2>
-            <p>Add authorized Incus servers, test existing remotes, or remove remotes from this server.</p>
+            <h2>Incus Server Management</h2>
+            <p>Add authorized Incus servers, verify connectivity, or remove servers from this controller.</p>
           </div>
         </div>
 
         <div class="remote-add-section">
-          <h3>Add New Remote</h3>
+          <h3>Add Incus Server</h3>
           <p class="note remote-note">
-            Add Remote will SSH to the target host, create Incus trust, add the remote locally, and verify it.
+            Add Incus Server will SSH to the target host, create Incus trust, add the server, and verify connectivity.
           </p>
 
           <div class="remote-add-grid">
@@ -114,14 +114,14 @@
               <input id="addRemoteTrustName" placeholder="IncusMobileServer" value="IncusMobileServer">
             </label>
 
-            <button id="addRemoteBtn" class="btn primary remote-add-btn">Add Remote</button>
+            <button id="addRemoteBtn" class="btn primary remote-add-btn">Add Server</button>
           </div>
         </div>
 
         <div class="authorized-remotes-section">
           <div class="section-title-row">
-            <h3>Authorized Remotes</h3>
-            <button id="refreshRemotesBtn" class="btn small-btn">Refresh Remotes</button>
+            <h3>Authorized Incus Servers</h3>
+            <button id="refreshRemotesBtn" class="btn small-btn">Refresh Servers</button>
           </div>
 
           <div class="table-wrap remote-table-wrap selectable-table" tabindex="0" data-table="remotesTable">
@@ -146,8 +146,22 @@
     <section class="panel">
       <div class="panel-heading">
         <div>
+          <h2>Mobile Role Policy</h2>
+          <p>Defines what each mobile client role can do. Use the global switch to enable or disable all mobile actions.</p>
+        </div>
+      </div>
+
+      <div id="rolePolicyCards"></div>
+    </section>
+
+
+
+
+<section class="panel">
+      <div class="panel-heading">
+        <div>
           <h2>Mobile Client Authorization</h2>
-          <p>Approve viewers, approve operators, or revoke mobile devices.</p>
+          <p>Authorize mobile clients and assign Viewer, Operator, or Admin roles.</p>
         </div>
       </div>
 
@@ -169,19 +183,6 @@
 
 
     <section class="panel">
-      <div class="panel-heading">
-        <div>
-          <h2>Mobile Role Policy</h2>
-          <p>Defines what each mobile client role can do. Use the global switch to enable or disable all mobile actions.</p>
-        </div>
-      </div>
-
-      <div id="rolePolicyCards"></div>
-    </section>
-
-
-
-<section class="panel">
       <div class="panel-heading">
         <div>
           <h2>Recent Activity</h2>
@@ -221,7 +222,7 @@
       <div class="filters">
         <input id="searchInput" placeholder="Search instances, remotes, IPs, status...">
         <select id="remoteFilter">
-          <option value="">All remotes</option>
+          <option value="">All servers</option>
         </select>
         <select id="statusFilter">
           <option value="">All statuses</option>
@@ -239,7 +240,7 @@
         <table id="instancesTable">
           <thead>
             <tr>
-              <th data-sort="remote">Remote</th>
+              <th data-sort="remote">Server</th>
               <th data-sort="name">Name</th>
               <th data-sort="type">Type</th>
               <th data-sort="status">Status</th>
@@ -262,6 +263,6 @@
 
   </main>
 
-  <script src="/public/admin.js?v=0.4.14-mobile-actions-render-fix"></script>
+  <script src="/public/admin.js?v=0.4.33-direct-audit-message-line-fix"></script>
 </body>
 </html>
