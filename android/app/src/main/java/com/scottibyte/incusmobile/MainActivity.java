@@ -17,6 +17,7 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.view.View;
+import android.view.WindowManager;
 
 import org.json.JSONObject;
 import org.json.JSONArray;
@@ -29,6 +30,9 @@ import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -36,7 +40,7 @@ import java.util.Map;
 
 public class MainActivity extends Activity {
     private static final String API_BASE_URL = "https://incusmobile.scottibyte.com";
-    private static final String APP_VERSION = "0.3.11";
+    private static final String APP_VERSION = "0.3.16";
     private static final String PREFS_NAME = "scottibyte_incus_mobile";
     private static final String PREF_DEVICE_ID = "device_id";
     private static final String PREF_BEARER_TOKEN = "bearer_token";
@@ -86,6 +90,10 @@ public class MainActivity extends Activity {
 
         getWindow().setStatusBarColor(0xFF050716);
         getWindow().setNavigationBarColor(0xFF050716);
+        getWindow().setFlags(
+            WindowManager.LayoutParams.FLAG_FULLSCREEN,
+            WindowManager.LayoutParams.FLAG_FULLSCREEN
+        );
 
         prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
         ensureDeviceId();
@@ -97,18 +105,18 @@ public class MainActivity extends Activity {
 
         fixedHeaderLayout = new LinearLayout(this);
         fixedHeaderLayout.setOrientation(LinearLayout.VERTICAL);
-        fixedHeaderLayout.setPadding(36, 24, 36, 20);
+        fixedHeaderLayout.setPadding(16, 0, 16, 8);
         fixedHeaderLayout.setBackground(makeRoundedBackground(0xFF050716, 0xFF0F172A, 1, 0));
 
         LinearLayout brandRow = new LinearLayout(this);
         brandRow.setOrientation(LinearLayout.HORIZONTAL);
         brandRow.setGravity(Gravity.CENTER_VERTICAL);
-        brandRow.setPadding(0, 0, 0, 16);
+        brandRow.setPadding(0, 0, 0, 6);
 
         ImageView brandLogoView = new ImageView(this);
         brandLogoView.setImageResource(R.drawable.app_icon);
-        LinearLayout.LayoutParams logoParams = new LinearLayout.LayoutParams(72, 72);
-        logoParams.setMargins(0, 0, 18, 0);
+        LinearLayout.LayoutParams logoParams = new LinearLayout.LayoutParams(108, 108);
+        logoParams.setMargins(0, 0, 16, 0);
         brandLogoView.setLayoutParams(logoParams);
 
         LinearLayout brandTextColumn = new LinearLayout(this);
@@ -139,6 +147,14 @@ public class MainActivity extends Activity {
         headerDetailsButton = new Button(this);
         headerDetailsButton.setText("Connection details ▸");
         styleBubbleButton(headerDetailsButton);
+
+        LinearLayout.LayoutParams headerDetailsButtonParams = new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        headerDetailsButtonParams.setMargins(0, 2, 0, 8);
+        headerDetailsButton.setLayoutParams(headerDetailsButtonParams);
+
         headerDetailsButton.setOnClickListener(v -> {
             headerDetailsVisible = !headerDetailsVisible;
             updateHeaderDetailsView();
@@ -146,9 +162,20 @@ public class MainActivity extends Activity {
 
         headerDetailsView = new TextView(this);
         headerDetailsView.setTextSize(13);
-        headerDetailsView.setTextColor(0xFFD1D5DB);
-        headerDetailsView.setGravity(Gravity.CENTER_HORIZONTAL);
-        headerDetailsView.setPadding(12, 14, 12, 0);
+        headerDetailsView.setTextColor(0xFFE5E7EB);
+        headerDetailsView.setGravity(Gravity.START);
+        headerDetailsView.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_START);
+        headerDetailsView.setPadding(22, 18, 22, 18);
+        headerDetailsView.setBackground(makeGlassBackground(0xDD10233F, 0xBB07111F, 0x6638BDF8, 1, 24));
+        headerDetailsView.setElevation(7f);
+
+        LinearLayout.LayoutParams headerDetailsViewParams = new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        headerDetailsViewParams.setMargins(0, 8, 0, 12);
+        headerDetailsView.setLayoutParams(headerDetailsViewParams);
+
         headerDetailsView.setVisibility(View.GONE);
 
         fixedHeaderLayout.addView(brandRow);
@@ -211,11 +238,27 @@ public class MainActivity extends Activity {
         backToServersButton = new Button(this);
         backToServersButton.setText("Back to Servers");
         styleBubbleButton(backToServersButton);
+
+        LinearLayout.LayoutParams backToServersParams = new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        backToServersParams.setMargins(0, 8, 0, 8);
+        backToServersButton.setLayoutParams(backToServersParams);
+
         backToServersButton.setOnClickListener(v -> showServerListView());
 
         backToInstancesButton = new Button(this);
         backToInstancesButton.setText("Back to Instances");
         styleBubbleButton(backToInstancesButton);
+
+        LinearLayout.LayoutParams backToInstancesParams = new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        backToInstancesParams.setMargins(0, 0, 0, 14);
+        backToInstancesButton.setLayoutParams(backToInstancesParams);
+
         backToInstancesButton.setOnClickListener(v -> {
             selectedInstanceKey = "";
             showServerDrilldownView();
@@ -317,7 +360,7 @@ public class MainActivity extends Activity {
 
         instanceDetailView = new TextView(this);
         instanceDetailView.setTextSize(14);
-        instanceDetailView.setText("\nSelected Instance");
+        instanceDetailView.setText("");
 
         selectedInstanceCardContainer = new LinearLayout(this);
         selectedInstanceCardContainer.setOrientation(LinearLayout.VERTICAL);
@@ -430,7 +473,7 @@ public class MainActivity extends Activity {
         }
 
         if (instanceDetailView != null) {
-            instanceDetailView.setText("\nSelected Instance");
+            instanceDetailView.setText("");
             instanceDetailView.setVisibility(View.GONE);
         }
 
@@ -454,7 +497,7 @@ public class MainActivity extends Activity {
         }
 
         if (selectedServerView != null) {
-            selectedServerView.setVisibility(View.VISIBLE);
+            selectedServerView.setVisibility(View.GONE);
         }
 
         if (backToServersButton != null) {
@@ -486,7 +529,7 @@ public class MainActivity extends Activity {
         }
 
         if (instanceDetailView != null) {
-            instanceDetailView.setText("\nSelected Instance");
+            instanceDetailView.setText("");
             instanceDetailView.setVisibility(View.GONE);
         }
 
@@ -542,8 +585,8 @@ public class MainActivity extends Activity {
         }
 
         if (instanceDetailView != null) {
-            instanceDetailView.setText("\nSelected Instance");
-            instanceDetailView.setVisibility(View.VISIBLE);
+            instanceDetailView.setText("");
+            instanceDetailView.setVisibility(View.GONE);
         }
 
         if (selectedInstanceCardContainer != null) {
@@ -655,7 +698,7 @@ public class MainActivity extends Activity {
         if (instanceCardsContainer != null) {
             instanceCardsContainer.removeAllViews();
         }
-        instanceDetailView.setText("\nSelected Instance\nNo instance selected.");
+        instanceDetailView.setText("");
         setStatus("Local token removed. Server approval was not changed. Request pairing again if needed.");
     }
 
@@ -989,6 +1032,16 @@ public class MainActivity extends Activity {
         return bg;
     }
 
+    private GradientDrawable makeGlassBackground(int startColor, int endColor, int strokeColor, int strokeWidth, int radius) {
+        GradientDrawable bg = new GradientDrawable(
+            GradientDrawable.Orientation.TL_BR,
+            new int[] { startColor, endColor }
+        );
+        bg.setCornerRadius(radius);
+        bg.setStroke(strokeWidth, strokeColor);
+        return bg;
+    }
+
     private void styleBubbleButton(Button button) {
         if (button == null) {
             return;
@@ -996,11 +1049,37 @@ public class MainActivity extends Activity {
 
         button.setAllCaps(false);
         button.setTextColor(0xFFE5E7EB);
-        button.setTextSize(14);
-        button.setPadding(28, 14, 28, 14);
-        button.setBackground(makeRoundedBackground(0xFF10233F, 0xFF3B82F6, 2, 999));
+        button.setTextSize(15);
+        button.setPadding(28, 13, 28, 13);
+        button.setBackground(makeGlassBackground(0xEE112744, 0xCC081827, 0xFF38BDF8, 2, 999));
+        button.setElevation(9f);
     }
 
+    private void styleGlassCard(LinearLayout card, boolean selected) {
+        if (card == null) {
+            return;
+        }
+
+        int start = selected ? 0xDD1E3A5F : 0x99111827;
+        int end = selected ? 0xAA0B2342 : 0x7707111F;
+        int stroke = selected ? 0xFF38BDF8 : 0x5538BDF8;
+
+        card.setPadding(30, 24, 30, 24);
+        card.setBackground(makeGlassBackground(start, end, stroke, selected ? 3 : 2, 32));
+        card.setElevation(selected ? 14f : 9f);
+    }
+    private String formatTimestampLocal(String value) {
+        if (value == null || value.trim().isEmpty() || "null".equalsIgnoreCase(value.trim())) {
+            return "Never";
+        }
+
+        try {
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd h:mm a z");
+            return formatter.withZone(ZoneId.systemDefault()).format(Instant.parse(value));
+        } catch (Exception e) {
+            return value;
+        }
+    }
     private void updateHeaderDetailsView() {
         if (headerDetailsButton == null || headerDetailsView == null) {
             return;
@@ -1020,9 +1099,9 @@ public class MainActivity extends Activity {
         }
 
         headerDetailsView.setText(
-            "Connected to:\n" + API_BASE_URL +
-            "\n\nClient:\n" + deviceName +
-            "\n\nVersion:\n" + APP_VERSION
+            "Server\n" + API_BASE_URL +
+            "\n\nClient\n" + deviceName +
+            "\n\nVersion\n" + APP_VERSION
         );
         headerDetailsView.setVisibility(View.VISIBLE);
     }
@@ -1201,15 +1280,11 @@ public class MainActivity extends Activity {
             boolean selected = !selectedServer.isEmpty()
                 && remote.equalsIgnoreCase(selectedServer);
 
-            GradientDrawable background = new GradientDrawable();
-            background.setCornerRadius(24);
-            background.setStroke(selected ? 4 : 2, selected ? 0xFF60A5FA : 0xFF3A4A66);
-            background.setColor(selected ? 0xFF1E3A5F : 0xFF111827);
-            card.setBackground(background);
+            styleGlassCard(card, selected);
 
             TextView title = new TextView(this);
             title.setText(remote);
-            title.setTextSize(18);
+            title.setTextSize(20);
             title.setTypeface(Typeface.DEFAULT_BOLD);
             title.setTextColor(0xFFFFFFFF);
 
@@ -1223,8 +1298,9 @@ public class MainActivity extends Activity {
             }
 
             countsView.setText(serverStats);
-            countsView.setTextSize(14);
-            countsView.setTextColor(0xFFD1D5DB);
+            countsView.setTextSize(15);
+            countsView.setTextColor(0xFFCBD5E1);
+            countsView.setPadding(0, 8, 0, 0);
 
             card.setClickable(true);
             card.setFocusable(true);
@@ -1244,8 +1320,8 @@ public class MainActivity extends Activity {
 
             TextView chevron = new TextView(this);
             chevron.setText("›");
-            chevron.setTextSize(28);
-            chevron.setTextColor(0xFF93C5FD);
+            chevron.setTextSize(34);
+            chevron.setTextColor(0xFF7DD3FC);
             chevron.setGravity(Gravity.END);
 
             card.addView(title);
@@ -1540,23 +1616,23 @@ public class MainActivity extends Activity {
             boolean hasError = item.optBoolean("error") || !error.isEmpty();
 
             GradientDrawable background = new GradientDrawable();
-            background.setCornerRadius(22);
+            background.setCornerRadius(32);
 
             if (selected) {
                 background.setStroke(4, 0xFF60A5FA);
                 background.setColor(0xFF1E3A5F);
             } else if (hasError) {
                 background.setStroke(3, 0xFFF87171);
-                background.setColor(0xFF3B1111);
+                background.setColor(0x99111827);
             } else if (running) {
-                background.setStroke(2, 0xFF34D399);
+                background.setStroke(2, 0x5534D399);
                 background.setColor(0xFF10261E);
             } else if (stopped) {
-                background.setStroke(2, 0xFFFBBF24);
+                background.setStroke(2, 0x55FBBF24);
                 background.setColor(0xFF2A2110);
             } else {
                 background.setStroke(2, 0xFF64748B);
-                background.setColor(0xFF111827);
+                background.setColor(0xAA111827);
             }
 
             card.setBackground(background);
@@ -1642,7 +1718,7 @@ public class MainActivity extends Activity {
         GradientDrawable background = new GradientDrawable();
         background.setCornerRadius(26);
         background.setStroke(4, 0xFF60A5FA);
-        background.setColor(0xFF111827);
+        background.setColor(0xAA111827);
         card.setBackground(background);
 
         TextView title = new TextView(this);
@@ -1664,8 +1740,10 @@ public class MainActivity extends Activity {
             appendDetailLine(out, "Status", status);
             appendDetailLine(out, "Architecture", architecture);
             appendDetailLine(out, "Location", location);
-            appendDetailLine(out, "Created", createdAt);
-            appendDetailLine(out, "Last Used", lastUsedAt);
+            appendDetailLine(out, "Created", formatTimestampLocal(createdAt));
+            if (!"Running".equalsIgnoreCase(item.optString("status", ""))) {
+                appendDetailLine(out, "Last Used", formatTimestampLocal(lastUsedAt));
+            }
         }
 
         details.setText(out.toString().trim());
@@ -1687,7 +1765,7 @@ public class MainActivity extends Activity {
             renderSelectedInstanceCard(item);
 
             if (item == null) {
-                instanceDetailView.setText("\nSelected Instance");
+                instanceDetailView.setText("");
                 return;
             }
 
@@ -1696,7 +1774,7 @@ public class MainActivity extends Activity {
                 String error = item.optString("error", "unknown error");
 
                 instanceDetailView.setText(
-                    "\nSelected Instance\n" +
+                    "" +
                     remote + ": ERROR\n" +
                     "Error: " + error
                 );
@@ -1714,7 +1792,7 @@ public class MainActivity extends Activity {
             String lastUsedAt = item.optString("last_used_at", "");
 
             StringBuilder detail = new StringBuilder();
-            detail.append("\nSelected Instance\n");
+            detail.append("");
 
             if (!remote.isEmpty() || !name.isEmpty()) {
                 detail.append(remote).append(":").append(name).append("\n");
@@ -1727,12 +1805,14 @@ public class MainActivity extends Activity {
             appendDetailLine(detail, "Status", status);
             appendDetailLine(detail, "Architecture", architecture);
             appendDetailLine(detail, "Location", location);
-            appendDetailLine(detail, "Created", createdAt);
-            appendDetailLine(detail, "Last Used", lastUsedAt);
+            appendDetailLine(detail, "Created", formatTimestampLocal(createdAt));
+            if (!"Running".equalsIgnoreCase(item.optString("status", ""))) {
+                appendDetailLine(detail, "Last Used", formatTimestampLocal(lastUsedAt));
+            }
 
-            instanceDetailView.setText("\nSelected Instance");
+            instanceDetailView.setText("");
         } catch (Exception e) {
-            instanceDetailView.setText("\nSelected Instance\nUnable to render instance detail.");
+            instanceDetailView.setText("Unable to render instance detail.");
         }
     }
 
