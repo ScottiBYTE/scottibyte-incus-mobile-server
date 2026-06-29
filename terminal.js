@@ -185,7 +185,7 @@ function attachMobileTerminal(server) {
 
       if (sessionInfo) {
         logAuditEvent({
-          actor_type: 'mobile',
+          actor_type: 'mobile_client',
           actor_id: String(sessionInfo.client.id),
           actor_name: getActorName(sessionInfo.client),
           event_type: 'terminal.closed',
@@ -205,7 +205,7 @@ function attachMobileTerminal(server) {
       sessionInfo = await validateTerminalRequest(req);
 
       logAuditEvent({
-        actor_type: 'mobile',
+        actor_type: 'mobile_client',
         actor_id: String(sessionInfo.client.id),
         actor_name: getActorName(sessionInfo.client),
         event_type: 'terminal.opened',

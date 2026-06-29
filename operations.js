@@ -361,7 +361,7 @@ function getMobileActor(req) {
   const client = req.mobileClient;
 
   return {
-    actor_type: 'mobile',
+    actor_type: 'mobile_client',
     actor_id: client?.id == null ? null : String(client.id),
     actor_name: client?.display_name || client?.device_name || client?.device_id || 'mobile-client',
     role: client?.role || 'viewer'

@@ -33,6 +33,23 @@ function ensureAuditTable() {
   `).run();
 }
 
+function normalizeAuditActorType(actorType) {
+  const value = String(actorType || 'system').trim().toLowerCase();
+
+  if (value === 'mobile') {
+    return 'mobile_client';
+  }
+
+  const allowed = new Set([
+    'admin',
+    'mobile_client',
+    'system',
+    'cli_recovery'
+  ]);
+
+  return allowed.has(value) ? value : 'system';
+}
+
 function logAuditEvent(event = {}) {
   ensureAuditTable();
 
@@ -54,7 +71,7 @@ function logAuditEvent(event = {}) {
     )
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
-    String(event.actor_type || 'system'),
+    normalizeAuditActorType(event.actor_type),
     event.actor_id == null ? null : String(event.actor_id),
     event.actor_name == null ? null : String(event.actor_name),
     String(event.event_type || 'unknown'),
