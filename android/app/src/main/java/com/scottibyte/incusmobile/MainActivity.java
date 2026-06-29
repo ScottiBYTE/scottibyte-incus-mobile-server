@@ -5,6 +5,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.content.SharedPreferences;
+import android.content.Context;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.text.Editable;
@@ -18,6 +19,8 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.view.View;
 import android.view.WindowManager;
+import android.view.inputmethod.InputMethodManager;
+import android.view.inputmethod.EditorInfo;
 
 import org.json.JSONObject;
 import org.json.JSONArray;
@@ -39,8 +42,10 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 public class MainActivity extends Activity {
-    private static final String API_BASE_URL = "https://incusmobile.scottibyte.com";
-    private static final String APP_VERSION = "0.3.16";
+    private static final String PREF_SERVER_URL = "server_url";
+    private static final String PREF_CLIENT_ROLE = "client_role";
+    private static final String DEFAULT_API_BASE_URL = "";
+    private static final String APP_VERSION = "0.3.22";
     private static final String PREFS_NAME = "scottibyte_incus_mobile";
     private static final String PREF_DEVICE_ID = "device_id";
     private static final String PREF_BEARER_TOKEN = "bearer_token";
@@ -67,6 +72,13 @@ public class MainActivity extends Activity {
     private Button headerDetailsButton;
     private TextView headerDetailsView;
     private boolean headerDetailsVisible = false;
+
+    private String apiBaseUrl = "";
+    private String mobileClientRole = "unknown";
+    private LinearLayout serverConfigPanel;
+    private EditText serverUrlInput;
+    private Button saveServerUrlButton;
+    private TextView connectionStatusView;
     private ScrollView mainScrollView;
     private LinearLayout serverCardsContainer;
     private TextView selectedServerView;
@@ -94,9 +106,13 @@ public class MainActivity extends Activity {
             WindowManager.LayoutParams.FLAG_FULLSCREEN,
             WindowManager.LayoutParams.FLAG_FULLSCREEN
         );
+        getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
 
         prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
-        ensureDeviceId();
+        
+        apiBaseUrl = getStoredServerUrl();
+        mobileClientRole = prefs.getString(PREF_CLIENT_ROLE, "unknown");
+ensureDeviceId();
 
         LinearLayout rootLayout = new LinearLayout(this);
         rootLayout.setOrientation(LinearLayout.VERTICAL);
@@ -178,9 +194,118 @@ public class MainActivity extends Activity {
 
         headerDetailsView.setVisibility(View.GONE);
 
+        serverConfigPanel = new LinearLayout(this);
+        serverConfigPanel.setOrientation(LinearLayout.VERTICAL);
+        serverConfigPanel.setPadding(22, 18, 22, 18);
+        serverConfigPanel.setBackground(makeGlassBackground(0xDD10233F, 0xBB07111F, 0x6638BDF8, 1, 24));
+        serverConfigPanel.setElevation(7f);
+
+        LinearLayout.LayoutParams serverConfigParams = new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        serverConfigParams.setMargins(0, 8, 0, 12);
+        serverConfigPanel.setLayoutParams(serverConfigParams);
+
+        TextView serverConfigTitle = new TextView(this);
+        serverConfigTitle.setText("Server URL");
+        serverConfigTitle.setTextSize(14);
+        serverConfigTitle.setTypeface(Typeface.DEFAULT_BOLD);
+        serverConfigTitle.setTextColor(0xFFFFFFFF);
+
+        TextView serverConfigHelp = new TextView(this);
+        serverConfigHelp.setText("Enter this phone's Incus Mobile Server address.");
+        serverConfigHelp.setTextSize(12);
+        serverConfigHelp.setTextColor(0xFFCBD5E1);
+        serverConfigHelp.setPadding(0, 4, 0, 10);
+
+        serverUrlInput = new EditText(this);
+        serverUrlInput.setSingleLine(true);
+        serverUrlInput.setImeOptions(EditorInfo.IME_ACTION_DONE);
+        serverUrlInput.setText(getApiBaseUrl());
+        serverUrlInput.setHint("https://your-incus-mobile-server.example.com");
+        serverUrlInput.setTextColor(0xFFFFFFFF);
+        serverUrlInput.setHintTextColor(0xFF94A3B8);
+        serverUrlInput.setTextSize(14);
+        serverUrlInput.setPadding(18, 12, 18, 12);
+        serverUrlInput.setBackground(makeGlassBackground(0xAA07111F, 0x8807111F, 0x5538BDF8, 1, 18));
+
+        serverUrlInput.setOnFocusChangeListener((v, hasFocus) -> {
+            if (hasFocus) {
+                if (headerDetailsView != null) {
+                    headerDetailsView.setVisibility(View.GONE);
+                }
+                if (headerDetailsButton != null) {
+                    headerDetailsButton.setText("Connection details ▸");
+                }
+            }
+        });
+
+        serverUrlInput.setOnEditorActionListener((v, actionId, event) -> {
+            if (actionId == EditorInfo.IME_ACTION_DONE) {
+                saveServerUrlFromInput();
+                return true;
+            }
+            return false;
+        });
+
+        serverUrlInput.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence text, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence text, int start, int before, int count) {
+                updateSaveServerUrlButtonVisibility();
+            }
+
+            @Override
+            public void afterTextChanged(Editable editable) {
+            }
+        });
+
+        updateSaveServerUrlButtonVisibility();
+
+        saveServerUrlButton = new Button(this);
+        saveServerUrlButton.setText("Save Server URL");
+        styleBubbleButton(saveServerUrlButton);
+
+        LinearLayout.LayoutParams saveServerUrlParams = new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        saveServerUrlParams.setMargins(0, 12, 0, 0);
+        saveServerUrlButton.setLayoutParams(saveServerUrlParams);
+
+        saveServerUrlButton.setOnClickListener(v -> saveServerUrlFromInput());
+
+        connectionStatusView = new TextView(this);
+        connectionStatusView.setText("");
+        connectionStatusView.setTextSize(13);
+        connectionStatusView.setTextColor(0xFFE5E7EB);
+        connectionStatusView.setPadding(18, 14, 18, 14);
+        connectionStatusView.setBackground(makeGlassBackground(0xAA07111F, 0x8807111F, 0x5538BDF8, 1, 18));
+        connectionStatusView.setVisibility(View.GONE);
+
+        LinearLayout.LayoutParams connectionStatusParams = new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        connectionStatusParams.setMargins(0, 12, 0, 0);
+        connectionStatusView.setLayoutParams(connectionStatusParams);
+
+        serverConfigPanel.addView(serverConfigTitle);
+        serverConfigPanel.addView(serverConfigHelp);
+        serverConfigPanel.addView(serverUrlInput);
+        serverConfigPanel.addView(saveServerUrlButton);
+        serverConfigPanel.addView(connectionStatusView);
+        serverConfigPanel.setVisibility(View.GONE);
+
+
         fixedHeaderLayout.addView(brandRow);
         fixedHeaderLayout.addView(headerDetailsButton);
         fixedHeaderLayout.addView(headerDetailsView);
+        fixedHeaderLayout.addView(serverConfigPanel);
 
         ScrollView scroll = new ScrollView(this);
         mainScrollView = scroll;
@@ -197,7 +322,7 @@ public class MainActivity extends Activity {
         title.setVisibility(View.GONE);
 
         TextView apiUrl = new TextView(this);
-        apiUrl.setText("\nAPI Base URL:\n" + API_BASE_URL);
+        apiUrl.setText("\nAPI Base URL:\n" + (hasServerUrl() ? getApiBaseUrl() : "Not configured"));
         apiUrl.setTextSize(15);
         apiUrl.setVisibility(View.GONE);
 
@@ -408,11 +533,14 @@ public class MainActivity extends Activity {
         setContentView(rootLayout);
 
         refreshTokenStatus();
+        if (!hasServerUrl()) {
+            headerDetailsVisible = true;
+        }
         updateHeaderDetailsView();
         updateAuthUiVisibility();
         showServerListView();
 
-        if (hasBearerToken()) {
+        if (hasBearerToken() && hasServerUrl()) {
             loadInstances();
         }
     }
@@ -601,11 +729,11 @@ public class MainActivity extends Activity {
         boolean authorized = hasBearerToken();
 
         if (requestPairingButton != null) {
-            requestPairingButton.setVisibility(authorized ? View.GONE : View.VISIBLE);
+            requestPairingButton.setVisibility(View.GONE);
         }
 
         if (checkApprovalButton != null) {
-            checkApprovalButton.setVisibility(authorized ? View.GONE : View.VISIBLE);
+            checkApprovalButton.setVisibility(View.GONE);
         }
 
         if (summaryButton != null) {
@@ -778,16 +906,23 @@ public class MainActivity extends Activity {
     };
 
     private void requestPairing() {
+        if (!hasServerUrl()) {
+            setConnectionStatus("Enter and save a Server URL first.");
+            headerDetailsVisible = true;
+            updateHeaderDetailsView();
+            return;
+        }
+
         saveDeviceName();
 
         String deviceName = getDeviceName();
 
         if (deviceName.trim().isEmpty()) {
-            setStatus("Device name is required.");
+            setConnectionStatus("Device name is required.");
             return;
         }
 
-        setStatus("Requesting pairing approval...");
+        setConnectionStatus("Requesting pairing approval...");
 
         new Thread(() -> {
             try {
@@ -807,26 +942,36 @@ public class MainActivity extends Activity {
                     JSONObject json = new JSONObject(result.body);
                     String status = json.optString("status", "");
 
-                    if ("pending".equals(status)) {
-                        setStatus("Pairing request submitted.\n\nWaiting for admin approval...");
-                        startPairingPolling();
-                        return;
-                    }
+                    runOnUiThread(() -> {
+                        updateClientIdentityFromResponse(json);
 
-                    if ("approved".equals(status)) {
-                        setStatus("Device is already approved. Checking for token...");
-                        checkPairingStatus(true);
-                        return;
-                    }
+                        if ("pending".equals(status)) {
+                            setConnectionStatus("Pairing request sent. Waiting for admin approval...");
+                            startPairingPolling();
+                            return;
+                        }
 
-                    if ("revoked".equals(status)) {
-                        stopPairingPolling();
-                    }
+                        if ("approved".equals(status)) {
+                            setConnectionStatus("Device approved. Claiming token...");
+                            checkPairingStatus(true);
+                            return;
+                        }
+
+                        if ("revoked".equals(status)) {
+                            stopPairingPolling();
+                            setConnectionStatus("Pairing was revoked on the server.");
+                            return;
+                        }
+
+                        setConnectionStatus(result.toDisplayString());
+                    });
+
+                    return;
                 }
 
-                setStatus(result.toDisplayString());
+                runOnUiThread(() -> setConnectionStatus(result.toDisplayString()));
             } catch (Exception e) {
-                setStatus(errorText(e));
+                runOnUiThread(() -> setConnectionStatus(errorText(e)));
             }
         }).start();
     }
@@ -837,7 +982,7 @@ public class MainActivity extends Activity {
 
     private void checkPairingStatus(boolean automatic) {
         if (!automatic) {
-            setStatus("Checking pairing status...");
+            setConnectionStatus("Checking pairing status...");
         }
 
         new Thread(() -> {
@@ -852,34 +997,79 @@ public class MainActivity extends Activity {
 
                 if (result.code >= 200 && result.code < 300) {
                     JSONObject json = new JSONObject(result.body);
+                    String status = json.optString("status", "");
 
-                    if (json.optBoolean("ok") && json.has("token")) {
-                        String token = json.optString("token", "");
-                        if (!token.trim().isEmpty()) {
-                            saveBearerToken(token);
-                            stopPairingPolling();
-                            setStatus("Approved. Token claimed and stored locally.\n\n" + result.toDisplayString());
-                            return;
+                    String token = json.optString("token", "");
+                    if (token.trim().isEmpty()) {
+                        JSONObject client = json.optJSONObject("client");
+                        if (client != null) {
+                            token = client.optString("token", "");
+                        }
+                    }
+                    if (token.trim().isEmpty()) {
+                        JSONObject mobileClient = json.optJSONObject("mobile_client");
+                        if (mobileClient != null) {
+                            token = mobileClient.optString("token", "");
                         }
                     }
 
-                    String status = json.optString("status", "");
-                    if ("pending".equals(status) && automatic) {
-                        setStatus("Waiting for admin approval...");
-                        return;
-                    }
+                    final String finalToken = token;
 
-                    if ("revoked".equals(status)) {
-                        stopPairingPolling();
-                    }
+                    runOnUiThread(() -> {
+                        updateClientIdentityFromResponse(json);
+
+                        if (!finalToken.trim().isEmpty()) {
+                            saveBearerToken(finalToken);
+                            stopPairingPolling();
+                            refreshTokenStatus();
+                            updateAuthUiVisibility();
+                            setConnectionStatus("Approved. Token stored locally. Loading servers...");
+                            loadAuthorizedHome();
+                            collapseConnectionDetailsSoon();
+                            return;
+                        }
+
+                        if ("pending".equals(status)) {
+                            setConnectionStatus("Pairing request sent. Waiting for admin approval...");
+                            if (!pairingPollingActive) {
+                                startPairingPolling();
+                            }
+                            return;
+                        }
+
+                        if ("approved".equals(status)) {
+                            setConnectionStatus("Approved. Waiting for server token...");
+                            if (!pairingPollingActive) {
+                                startPairingPolling();
+                            }
+                            return;
+                        }
+
+                        if ("revoked".equals(status)) {
+                            stopPairingPolling();
+                            setConnectionStatus("Pairing was revoked on the server.");
+                            return;
+                        }
+
+                        if (!automatic) {
+                            setConnectionStatus(result.toDisplayString());
+                        }
+                    });
+
+                    return;
                 }
 
-                setStatus(result.toDisplayString());
+                runOnUiThread(() -> {
+                    if (!automatic) {
+                        setConnectionStatus(result.toDisplayString());
+                    }
+                });
             } catch (Exception e) {
-                setStatus(errorText(e));
+                runOnUiThread(() -> setConnectionStatus(errorText(e)));
             }
         }).start();
     }
+
 
     private void loadAuthorizedHome() {
         String token = getBearerToken();
@@ -903,6 +1093,7 @@ public class MainActivity extends Activity {
 
                 if (result.code >= 200 && result.code < 300) {
                     JSONObject json = new JSONObject(result.body);
+                    updateClientIdentityFromResponse(json);
                     if (json.optBoolean("ok")) {
                         setDashboardFromSummary(json);
                         setStatus("Summary updated.");
@@ -988,6 +1179,7 @@ public class MainActivity extends Activity {
 
                 if (result.code >= 200 && result.code < 300) {
                     JSONObject json = new JSONObject(result.body);
+                    updateClientIdentityFromResponse(json);
                     if (json.optBoolean("ok")) {
                         setInstancesFromResponse(json);
                         return;
@@ -1002,6 +1194,7 @@ public class MainActivity extends Activity {
     }
 
     private void setInstancesFromResponse(JSONObject json) {
+        updateClientIdentityFromResponse(json);
         lastInstances = json.optJSONArray("instances");
 
         new Handler(Looper.getMainLooper()).post(() -> {
@@ -1014,12 +1207,16 @@ public class MainActivity extends Activity {
             if (serverFilter.isEmpty()) {
                 showServerListView();
                 renderRemoteSummary();
+                setConnectionStatus("");
                 setStatus("Servers updated.");
+        collapseConnectionDetailsSoon();
             } else {
                 showServerDrilldownView();
                 renderRemoteSummary();
                 renderInstancesList();
+                setConnectionStatus("");
                 setStatus("Instances updated.");
+        collapseConnectionDetailsSoon();
             }
         });
     }
@@ -1080,10 +1277,200 @@ public class MainActivity extends Activity {
             return value;
         }
     }
+    private void collapseConnectionDetailsSoon() {
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            if (hasServerUrl() && hasBearerToken()) {
+                headerDetailsVisible = false;
+                updateHeaderDetailsView();
+            }
+        }, 2500);
+    }
+    private String normalizeServerUrl(String value) {
+        if (value == null) {
+            return "";
+        }
+
+        String normalized = value.trim();
+        while (normalized.endsWith("/")) {
+            normalized = normalized.substring(0, normalized.length() - 1);
+        }
+
+        if (!normalized.isEmpty() && !normalized.startsWith("http://") && !normalized.startsWith("https://")) {
+            normalized = "https://" + normalized;
+        }
+
+        return normalized;
+    }
+
+    private String getStoredServerUrl() {
+        if (prefs == null) {
+            return DEFAULT_API_BASE_URL;
+        }
+        return normalizeServerUrl(prefs.getString(PREF_SERVER_URL, DEFAULT_API_BASE_URL));
+    }
+
+    private String getApiBaseUrl() {
+        return apiBaseUrl == null ? "" : apiBaseUrl;
+    }
+
+    private boolean hasServerUrl() {
+        return !getApiBaseUrl().trim().isEmpty();
+    }
+
+    private String getClientRoleDisplay() {
+        if (mobileClientRole == null || mobileClientRole.trim().isEmpty()) {
+            return "unknown";
+        }
+        return mobileClientRole;
+    }
+
+    private void updateServerConfigVisibility() {
+        if (serverConfigPanel == null) {
+            return;
+        }
+
+        if (!hasServerUrl() || headerDetailsVisible) {
+            serverConfigPanel.setVisibility(View.VISIBLE);
+        } else {
+            serverConfigPanel.setVisibility(View.GONE);
+        }
+
+        if (serverUrlInput != null && !serverUrlInput.hasFocus()) {
+            serverUrlInput.setText(getApiBaseUrl());
+        }
+        updateSaveServerUrlButtonVisibility();
+    }
+
+    private void setConnectionStatus(String message) {
+        setStatus(message);
+
+        if (connectionStatusView == null) {
+            return;
+        }
+
+        if (message == null || message.trim().isEmpty()) {
+            connectionStatusView.setText("");
+            connectionStatusView.setVisibility(View.GONE);
+            return;
+        }
+
+        connectionStatusView.setText(message);
+        connectionStatusView.setVisibility(View.VISIBLE);
+    }
+    private void updateSaveServerUrlButtonVisibility() {
+        if (saveServerUrlButton == null || serverUrlInput == null) {
+            return;
+        }
+
+        String typedUrl = normalizeServerUrl(serverUrlInput.getText().toString());
+        boolean shouldShow = typedUrl.isEmpty() || !typedUrl.equals(getApiBaseUrl());
+        saveServerUrlButton.setVisibility(shouldShow ? View.VISIBLE : View.GONE);
+    }
+    private void hideKeyboard() {
+        try {
+            InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+            if (imm != null && serverUrlInput != null) {
+                imm.hideSoftInputFromWindow(serverUrlInput.getWindowToken(), 0);
+                serverUrlInput.clearFocus();
+            }
+        } catch (Exception ignored) {
+        }
+    }
+    private void saveServerUrlFromInput() {
+        if (serverUrlInput == null || prefs == null) {
+            return;
+        }
+
+        String oldUrl = getApiBaseUrl();
+        String newUrl = normalizeServerUrl(serverUrlInput.getText().toString());
+
+        if (newUrl.isEmpty()) {
+            setConnectionStatus("Enter a server URL first.");
+            updateServerConfigVisibility();
+            return;
+        }
+
+        boolean changed = !newUrl.equals(oldUrl);
+        apiBaseUrl = newUrl;
+
+        SharedPreferences.Editor editor = prefs.edit();
+        editor.putString(PREF_SERVER_URL, newUrl);
+
+        if (changed) {
+            editor.remove(PREF_BEARER_TOKEN);
+            editor.putString(PREF_CLIENT_ROLE, "unknown");
+            mobileClientRole = "unknown";
+        }
+
+        editor.apply();
+        hideKeyboard();
+        updateSaveServerUrlButtonVisibility();
+        refreshTokenStatus();
+        updateHeaderDetailsView();
+        updateAuthUiVisibility();
+
+        setConnectionStatus("Checking server reachability...");
+
+        new Thread(() -> {
+            try {
+                HttpResult result = httpRequest("GET", "/api/mobile/health", null, null);
+
+                runOnUiThread(() -> {
+                    if (result.code >= 200 && result.code < 300) {
+                        setConnectionStatus("Server reachable. Requesting pairing...");
+                        requestPairing();
+                    } else {
+                        setConnectionStatus("Server URL saved, but server health check failed: HTTP " + result.code);
+                        headerDetailsVisible = true;
+                        updateHeaderDetailsView();
+                    }
+                });
+            } catch (Exception e) {
+                runOnUiThread(() -> {
+                    setConnectionStatus("Server URL saved, but server is unreachable: " + e.getMessage());
+                    headerDetailsVisible = true;
+                    updateHeaderDetailsView();
+                });
+            }
+        }).start();
+    }
+
+    private void updateClientIdentityFromResponse(JSONObject json) {
+        if (json == null || prefs == null) {
+            return;
+        }
+
+        String role = "";
+
+        JSONObject client = json.optJSONObject("client");
+        if (client != null) {
+            role = client.optString("role", "").trim();
+        }
+
+        if (role.isEmpty()) {
+            JSONObject mobileClient = json.optJSONObject("mobile_client");
+            if (mobileClient != null) {
+                role = mobileClient.optString("role", "").trim();
+            }
+        }
+
+        if (role.isEmpty()) {
+            role = json.optString("role", "").trim();
+        }
+
+        if (!role.isEmpty()) {
+            mobileClientRole = role;
+            prefs.edit().putString(PREF_CLIENT_ROLE, role).apply();
+            updateHeaderDetailsView();
+        }
+    }
+
     private void updateHeaderDetailsView() {
         if (headerDetailsButton == null || headerDetailsView == null) {
             return;
         }
+
+        updateServerConfigVisibility();
 
         if (!headerDetailsVisible) {
             headerDetailsButton.setText("Connection details ▸");
@@ -1098,12 +1485,16 @@ public class MainActivity extends Activity {
             deviceName = "Unnamed device";
         }
 
+        String serverText = hasServerUrl() ? getApiBaseUrl() : "Not configured";
+
         headerDetailsView.setText(
-            "Server\n" + API_BASE_URL +
+            "Server\n" + serverText +
             "\n\nClient\n" + deviceName +
+            "\n\nRole\n" + getClientRoleDisplay() +
             "\n\nVersion\n" + APP_VERSION
         );
         headerDetailsView.setVisibility(View.VISIBLE);
+        updateServerConfigVisibility();
     }
     private void renderHeaderStats() {
         if (headerStatsView == null) {
@@ -1825,7 +2216,10 @@ public class MainActivity extends Activity {
     }
 
     private HttpResult httpRequest(String method, String path, String jsonBody, String bearerToken) throws Exception {
-        URL url = new URL(API_BASE_URL + path);
+        if (!hasServerUrl()) {
+            throw new IllegalStateException("Server URL is not configured");
+        }
+        URL url = new URL(getApiBaseUrl() + path);
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
 
         conn.setRequestMethod(method);
