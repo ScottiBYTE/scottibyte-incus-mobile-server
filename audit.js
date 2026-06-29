@@ -86,7 +86,7 @@ function logAuditEvent(event = {}) {
 function listAuditEvents(limit = 50) {
   ensureAuditTable();
 
-  const safeLimit = Math.max(1, Math.min(Number(limit || 50), 200));
+  const safeLimit = Math.max(1, Math.min(Number(limit || 100), 500));
 
   return db.prepare(`
     SELECT

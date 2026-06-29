@@ -1581,3 +1581,10 @@ body.light-theme #actionsStatus.enabled {
   background: rgba(239, 68, 68, 0.12);
   border-color: rgba(239, 68, 68, 0.35);
 }
+
+
+.audit-limit-btn.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.35);
+  font-weight: 800;
+}

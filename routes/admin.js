@@ -110,7 +110,7 @@ function auditRowsToCsv(rows) {
 
 router.get('/audit-events', (req, res) => {
   try {
-    const limit = Number(req.query.limit || 50);
+    const limit = Math.max(1, Math.min(Number(req.query.limit || 100), 500));
 
     res.json({
       ok: true,
@@ -537,20 +537,33 @@ router.post('/remotes', async (req, res) => {
 });
 
 router.post('/remotes/:name/test', async (req, res) => {
+  const isAutomaticTest = String(req.query.source || '').toLowerCase() === 'auto';
+
   try {
     const result = await testRemote(req.params.name);
 
-    logAuditEvent({
-      ...getAdminActor(req),
-      event_type: 'remote.test',
-      target_type: 'remote',
-      target_id: req.params.name,
-      result: result.ok ? 'success' : 'failed',
-      message: result.ok
-        ? `Remote ${req.params.name} is reachable`
-        : `Remote ${req.params.name} test failed`,
-      metadata: result
-    });
+    /*
+     * Automatic successful server checks are routine monitoring noise.
+     * Keep the dashboard useful by auditing:
+     * - manual server test success/failure
+     * - automatic server test failures
+     */
+    if (!isAutomaticTest || !result.ok) {
+      logAuditEvent({
+        ...getAdminActor(req),
+        event_type: 'remote.test',
+        target_type: 'remote',
+        target_id: req.params.name,
+        result: result.ok ? 'success' : 'failed',
+        message: result.ok
+          ? `Server ${req.params.name} is reachable`
+          : `Server ${req.params.name} test failed`,
+        metadata: {
+          ...result,
+          source: isAutomaticTest ? 'auto' : 'manual'
+        }
+      });
+    }
 
     res.status(result.ok ? 200 : 502).json({
       ok: result.ok,
@@ -563,7 +576,10 @@ router.post('/remotes/:name/test', async (req, res) => {
       target_type: 'remote',
       target_id: req.params.name,
       result: 'failed',
-      message: err.message
+      message: `Server ${req.params.name} test failed: ${err.message}`,
+      metadata: {
+        source: isAutomaticTest ? 'auto' : 'manual'
+      }
     });
 
     res.status(400).json({

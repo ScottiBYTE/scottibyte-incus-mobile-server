@@ -12,7 +12,8 @@ let state = {
   remoteTests: {},
   instanceSort: { key: 'remote', dir: 'asc' },
   clientSort: { key: 'status', dir: 'asc' },
-  remoteSort: { key: 'name', dir: 'asc' }
+  remoteSort: { key: 'name', dir: 'asc' },
+  auditLimit: Number(localStorage.getItem('scottibyteAuditLimit') || 100)
 };
 
 function $(id) {
@@ -118,6 +119,37 @@ function metricBubble(value) {
   return bubble(raw, 'good');
 }
 
+
+
+
+function displayDateTime(value) {
+  if (!value) return '-';
+
+  const raw = String(value).trim();
+  const normalized = /Z$|[+-]\d\d:\d\d$/.test(raw) ? raw : `${raw}Z`;
+  const date = new Date(normalized);
+
+  if (Number.isNaN(date.getTime())) return raw;
+
+  const timeZone =
+    state?.health?.app_time_zone ||
+    Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: 'numeric',
+      minute: '2-digit',
+      second: '2-digit',
+      timeZoneName: 'short'
+    }).format(date);
+  } catch {
+    return date.toLocaleString();
+  }
+}
 
 
 function displayClientStatus(status) {
@@ -294,7 +326,7 @@ function autoTestRemotes() {
 
     state.remoteAutoTests[name] = true;
 
-    fetchJson(`/api/admin/remotes/${encodeURIComponent(name)}/test`, {
+    fetchJson(`/api/admin/remotes/${encodeURIComponent(name)}/test?source=auto`, {
       method: 'POST'
     })
       .then((data) => {
@@ -407,7 +439,7 @@ function renderAudit(events) {
 
     return `
       <tr>
-        <td>${escapeHtml(event.created_at || '-')}</td>
+        <td>${escapeHtml(displayDateTime(event.created_at))}</td>
         <td>${bubble(actor, 'remote')}</td>
         <td>${escapeHtml(displayAuditEventName(event.event_type || '-'))}</td>
         <td>${escapeHtml(target)}</td>
@@ -418,9 +450,62 @@ function renderAudit(events) {
   }).join('');
 }
 
+
+function getAuditLimit() {
+  const allowed = [25, 50, 100, 250, 500];
+  const value = Number(state.auditLimit || localStorage.getItem('scottibyteAuditLimit') || 100);
+
+  return allowed.includes(value) ? value : 100;
+}
+
+function renderAuditLimitButtons() {
+  const current = getAuditLimit();
+
+  document.querySelectorAll('.audit-limit-btn').forEach((btn) => {
+    const limit = Number(btn.dataset.auditLimit);
+    const selected = limit === current;
+
+    btn.classList.toggle('primary', selected);
+    btn.classList.toggle('secondary', !selected);
+    btn.classList.toggle('selected', selected);
+    btn.setAttribute('aria-pressed', selected ? 'true' : 'false');
+  });
+}
+
+async function setAuditLimit(limit) {
+  const value = Number(limit);
+  const allowed = [25, 50, 100, 250, 500];
+
+  if (!allowed.includes(value)) return;
+
+  state.auditLimit = value;
+  localStorage.setItem('scottibyteAuditLimit', String(value));
+  renderAuditLimitButtons();
+
+  if (typeof loadAudit === 'function') {
+    await loadAudit();
+  }
+}
+
+function bindAuditLimitButtons() {
+  document.querySelectorAll('.audit-limit-btn').forEach((btn) => {
+    if (btn.dataset.bound === 'true') return;
+
+    btn.dataset.bound = 'true';
+
+    btn.addEventListener('click', async (event) => {
+      event.preventDefault();
+      await setAuditLimit(Number(btn.dataset.auditLimit));
+    });
+  });
+
+  renderAuditLimitButtons();
+}
+
 async function loadAudit() {
-  const data = await fetchJson('/api/admin/audit-events?limit=25');
+  const data = await fetchJson(`/api/admin/audit-events?limit=${getAuditLimit()}`);
   renderAudit(data.events || []);
+  renderAuditLimitButtons();
 }
 
 
@@ -1287,6 +1372,7 @@ function startMobileClientAutoRefresh() {
 }
 
 function init() {
+  bindAuditLimitButtons();
   initTheme();
 
   $('themeToggleBtn').addEventListener('click', toggleTheme);
@@ -1587,3 +1673,13 @@ window.renderOperationsPreview = function renderOperationsPreview() {
 window.loadOperationsPreview = async function loadOperationsPreview() {
   state.operationsPreview = [];
 };
+
+
+document.addEventListener('click', async (event) => {
+  const btn = event.target.closest('.audit-limit-btn');
+
+  if (!btn) return;
+
+  event.preventDefault();
+  await setAuditLimit(Number(btn.dataset.auditLimit));
+});

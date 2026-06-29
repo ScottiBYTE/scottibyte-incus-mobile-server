@@ -188,6 +188,14 @@
           <h2>Recent Activity</h2>
           <p>Administrative and operational audit events.</p>
         </div>
+        <div class="audit-size-controls" aria-label="Recent Activity display size">
+          <span class="audit-size-label">Show</span>
+          <button type="button" class="btn tiny audit-limit-btn" data-audit-limit="25">25</button>
+          <button type="button" class="btn tiny audit-limit-btn" data-audit-limit="50">50</button>
+          <button type="button" class="btn tiny audit-limit-btn" data-audit-limit="100">100</button>
+          <button type="button" class="btn tiny audit-limit-btn" data-audit-limit="250">250</button>
+          <button type="button" class="btn tiny audit-limit-btn" data-audit-limit="500">500</button>
+        </div>
         <button id="refreshAuditBtn" class="btn small-btn">Refresh Activity</button>
       </div>
 
@@ -263,6 +271,6 @@
 
   </main>
 
-  <script src="/public/admin.js?v=0.4.33-direct-audit-message-line-fix"></script>
+  <script src="/public/admin.js?v=0.4.41-working-audit-size-controls"></script>
 </body>
 </html>
