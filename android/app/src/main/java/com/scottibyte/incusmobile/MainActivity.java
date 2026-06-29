@@ -46,7 +46,7 @@ public class MainActivity extends Activity {
     private static final String PREF_SERVER_URL = "server_url";
     private static final String PREF_CLIENT_ROLE = "client_role";
     private static final String DEFAULT_API_BASE_URL = "";
-    private static final String APP_VERSION = "0.3.37";
+    private static final String APP_VERSION = "0.3.46";
     private static final String PREFS_NAME = "scottibyte_incus_mobile";
     private static final String PREF_DEVICE_ID = "device_id";
     private static final String PREF_BEARER_TOKEN = "bearer_token";
@@ -74,6 +74,8 @@ public class MainActivity extends Activity {
     private TextView headerDetailsView;
     private boolean headerDetailsVisible = false;
     private LinearLayout fixedActionBarLayout;
+    private LinearLayout fixedFilterRowLayout;
+    private Button clearInstanceFilterButton;
 
     private String apiBaseUrl = "";
     private String mobileClientRole = "unknown";
@@ -120,12 +122,12 @@ ensureDeviceId();
 
         LinearLayout rootLayout = new LinearLayout(this);
         rootLayout.setOrientation(LinearLayout.VERTICAL);
-        rootLayout.setFitsSystemWindows(true);
+        rootLayout.setFitsSystemWindows(false);
         rootLayout.setBackgroundColor(0xFF050716);
 
         fixedHeaderLayout = new LinearLayout(this);
         fixedHeaderLayout.setOrientation(LinearLayout.VERTICAL);
-        fixedHeaderLayout.setPadding(16, 0, 16, 8);
+        fixedHeaderLayout.setPadding(16, 64, 16, 10);
         fixedHeaderLayout.setBackground(makeRoundedBackground(0xFF050716, 0xFF0F172A, 1, 0));
 
         LinearLayout brandRow = new LinearLayout(this);
@@ -135,7 +137,7 @@ ensureDeviceId();
 
         ImageView brandLogoView = new ImageView(this);
         brandLogoView.setImageResource(R.drawable.app_icon);
-        LinearLayout.LayoutParams logoParams = new LinearLayout.LayoutParams(108, 108);
+        LinearLayout.LayoutParams logoParams = new LinearLayout.LayoutParams(88, 88);
         logoParams.setMargins(0, 0, 16, 0);
         brandLogoView.setLayoutParams(logoParams);
 
@@ -172,7 +174,7 @@ ensureDeviceId();
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT
         );
-        headerDetailsButtonParams.setMargins(0, 2, 0, 8);
+        headerDetailsButtonParams.setMargins(0, 6, 0, 10);
         headerDetailsButton.setLayoutParams(headerDetailsButtonParams);
 
         headerDetailsButton.setOnClickListener(v -> {
@@ -373,7 +375,7 @@ ensureDeviceId();
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT
         );
-        backToServersParams.setMargins(0, 8, 0, 8);
+        backToServersParams.setMargins(0, 6, 0, 6);
         backToServersButton.setLayoutParams(backToServersParams);
 
         backToServersButton.setOnClickListener(v -> showServerListView());
@@ -386,7 +388,7 @@ ensureDeviceId();
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT
         );
-        backToInstancesParams.setMargins(0, 0, 0, 14);
+        backToInstancesParams.setMargins(0, 6, 0, 10);
         backToInstancesButton.setLayoutParams(backToInstancesParams);
 
         backToInstancesButton.setOnClickListener(v -> {
@@ -413,7 +415,7 @@ ensureDeviceId();
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT
         );
-        fixedButtonParams.setMargins(0, 4, 0, 4);
+        fixedButtonParams.setMargins(0, 6, 0, 6);
 
         summaryButton.setLayoutParams(fixedButtonParams);
 
@@ -491,6 +493,8 @@ ensureDeviceId();
 
             @Override
             public void afterTextChanged(Editable value) {
+                updateClearFilterButtonVisibility();
+
                 if (suppressFilterEvents) {
                     return;
                 }
@@ -517,16 +521,99 @@ ensureDeviceId();
 
             @Override
             public void afterTextChanged(Editable value) {
+                updateClearFilterButtonVisibility();
+
                 if (suppressFilterEvents) {
                     return;
                 }
 
                 if (instancesView != null && instanceDetailView != null && lastInstances != null) {
                     selectedInstanceKey = "";
-                    renderInstancesList();
+                    lastSelectedInstance = null;
+
+                    String serverFilter = serverFilterInput != null
+                        ? serverFilterInput.getText().toString().trim()
+                        : "";
+
+                    String instanceFilter = instanceFilterInput != null
+                        ? instanceFilterInput.getText().toString().trim()
+                        : "";
+
+                    /*
+                     * Server screen: instance filter searches all servers.
+                     * Instance screen: serverFilter is set, so the same filter
+                     * searches only that selected server.
+                     */
+                    if (serverFilter.isEmpty()) {
+                        if (instanceFilter.isEmpty()) {
+                            if (serverCardsContainer != null) {
+                                serverCardsContainer.setVisibility(View.VISIBLE);
+                            }
+                            if (instanceCardsContainer != null) {
+                                instanceCardsContainer.removeAllViews();
+                                instanceCardsContainer.setVisibility(View.GONE);
+                            }
+                            renderRemoteSummary();
+                        } else {
+                            if (serverCardsContainer != null) {
+                                serverCardsContainer.setVisibility(View.GONE);
+                            }
+                            if (instanceCardsContainer != null) {
+                                instanceCardsContainer.setVisibility(View.VISIBLE);
+                            }
+                            renderInstancesList();
+                        }
+                    } else {
+                        renderInstancesList();
+                    }
                 }
             }
         });
+
+        styleFilterInput(instanceFilterInput);
+
+        fixedFilterRowLayout = new LinearLayout(this);
+        fixedFilterRowLayout.setOrientation(LinearLayout.HORIZONTAL);
+        fixedFilterRowLayout.setGravity(Gravity.CENTER_VERTICAL);
+        fixedFilterRowLayout.setPadding(0, 0, 0, 0);
+        fixedFilterRowLayout.setVisibility(View.GONE);
+
+        LinearLayout.LayoutParams filterRowParams = new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        filterRowParams.setMargins(0, 18, 0, 10);
+        fixedFilterRowLayout.setLayoutParams(filterRowParams);
+
+        clearInstanceFilterButton = new Button(this);
+        clearInstanceFilterButton.setText("×");
+        clearInstanceFilterButton.setAllCaps(false);
+        clearInstanceFilterButton.setTextSize(18);
+        clearInstanceFilterButton.setTextColor(0xFFFFFFFF);
+        clearInstanceFilterButton.setPadding(0, 0, 0, 0);
+        clearInstanceFilterButton.setBackground(makeGlassBackground(0xCC1F2937, 0xAA111827, 0x7738BDF8, 1, 22));
+
+        LinearLayout.LayoutParams clearParams = new LinearLayout.LayoutParams(
+            54,
+            LinearLayout.LayoutParams.MATCH_PARENT
+        );
+        clearParams.setMargins(0, 0, 0, 0);
+        clearInstanceFilterButton.setLayoutParams(clearParams);
+        clearInstanceFilterButton.setVisibility(View.GONE);
+
+        clearInstanceFilterButton.setOnClickListener(v -> {
+            if (instanceFilterInput != null) {
+                instanceFilterInput.setText("");
+            }
+            updateClearFilterButtonVisibility();
+        });
+
+        fixedFilterRowLayout.addView(instanceFilterInput);
+        fixedFilterRowLayout.addView(clearInstanceFilterButton);
+
+        if (fixedActionBarLayout != null) {
+            fixedActionBarLayout.addView(fixedFilterRowLayout);
+        }
 
         instanceDetailView = new TextView(this);
         instanceDetailView.setTextSize(14);
@@ -555,8 +642,6 @@ ensureDeviceId();
         layout.addView(remoteSummaryView);
         layout.addView(serverCardsContainer);
         layout.addView(selectedServerView);
-        layout.addView(serverFilterInput);
-        layout.addView(instanceFilterInput);
         layout.addView(instancesView);
         layout.addView(instanceCardsContainer);
         layout.addView(instanceDetailView);
@@ -603,9 +688,19 @@ ensureDeviceId();
         }
 
         if (instanceFilterInput != null) {
-            instanceFilterInput.setText("");
-            instanceFilterInput.setVisibility(View.GONE);
+            instanceFilterInput.setHint("Search instances across all servers");
+            instanceFilterInput.setVisibility(View.VISIBLE);
         }
+
+        if (fixedFilterRowLayout != null) {
+            fixedFilterRowLayout.setVisibility(View.VISIBLE);
+        }
+        updateClearFilterButtonVisibility();
+
+        if (fixedFilterRowLayout != null) {
+            fixedFilterRowLayout.setVisibility(View.VISIBLE);
+        }
+        updateClearFilterButtonVisibility();
 
         if (serversSectionView != null) {
             serversSectionView.setVisibility(View.VISIBLE);
@@ -684,8 +779,19 @@ ensureDeviceId();
         }
 
         if (instanceFilterInput != null) {
-            instanceFilterInput.setVisibility(View.GONE);
+            instanceFilterInput.setHint("Search instances on this server");
+            instanceFilterInput.setVisibility(View.VISIBLE);
         }
+
+        if (fixedFilterRowLayout != null) {
+            fixedFilterRowLayout.setVisibility(View.VISIBLE);
+        }
+        updateClearFilterButtonVisibility();
+
+        if (fixedFilterRowLayout != null) {
+            fixedFilterRowLayout.setVisibility(View.VISIBLE);
+        }
+        updateClearFilterButtonVisibility();
 
         if (remoteSummaryView != null) {
             remoteSummaryView.setVisibility(View.GONE);
@@ -741,6 +847,14 @@ ensureDeviceId();
 
         if (instanceFilterInput != null) {
             instanceFilterInput.setVisibility(View.GONE);
+        }
+
+        if (fixedFilterRowLayout != null) {
+            fixedFilterRowLayout.setVisibility(View.GONE);
+        }
+
+        if (fixedFilterRowLayout != null) {
+            fixedFilterRowLayout.setVisibility(View.GONE);
         }
 
         if (remoteSummaryView != null) {
@@ -921,14 +1035,16 @@ ensureDeviceId();
             instancesView.setVisibility(View.GONE);
         }
 
-        if (serverFilterInput != null) {
-            serverFilterInput.setVisibility(View.GONE);
-        }
+        /*
+         * Do not hide serverFilterInput or instanceFilterInput here.
+         * The active screen methods control filter visibility.
+         */
 
         if (statusView != null) {
             statusView.setVisibility(View.GONE);
         }
     }
+
 
     private void testHealth() {
         setStatus("Testing public health endpoint...");
@@ -1295,6 +1411,21 @@ ensureDeviceId();
             if (serverFilter.isEmpty()) {
                 showServerListView();
                 renderRemoteSummary();
+
+                String instanceFilter = instanceFilterInput != null
+                    ? instanceFilterInput.getText().toString().trim()
+                    : "";
+
+                if (!instanceFilter.isEmpty()) {
+                    if (serverCardsContainer != null) {
+                        serverCardsContainer.setVisibility(View.GONE);
+                    }
+                    if (instanceCardsContainer != null) {
+                        instanceCardsContainer.setVisibility(View.VISIBLE);
+                    }
+                    renderInstancesList();
+                }
+
                 setConnectionStatus("");
                 setStatus("Servers updated.");
         collapseConnectionDetailsSoon();
@@ -1363,6 +1494,41 @@ ensureDeviceId();
         button.setBackground(makeGlassBackground(0xEE112744, 0xCC081827, 0xFF38BDF8, 2, 999));
         button.setElevation(9f);
     }
+
+    private void styleFilterInput(EditText input) {
+        if (input == null) {
+            return;
+        }
+
+        input.setSingleLine(true);
+        input.setTextColor(0xFFFFFFFF);
+        input.setHintTextColor(0xFF94A3B8);
+        input.setTextSize(15);
+        input.setPadding(22, 13, 22, 13);
+        input.setBackground(makeGlassBackground(0xCC07111F, 0xAA07111F, 0x7738BDF8, 1, 22));
+
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+            0,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            1
+        );
+        params.setMargins(0, 0, 8, 0);
+        input.setLayoutParams(params);
+    }
+
+
+    private void updateClearFilterButtonVisibility() {
+        if (clearInstanceFilterButton == null || instanceFilterInput == null) {
+            return;
+        }
+
+        String value = instanceFilterInput.getText() == null
+            ? ""
+            : instanceFilterInput.getText().toString().trim();
+
+        clearInstanceFilterButton.setVisibility(value.isEmpty() ? View.GONE : View.VISIBLE);
+    }
+
 
     private void styleGlassCard(LinearLayout card, boolean selected) {
         if (card == null) {
@@ -2055,6 +2221,17 @@ ensureDeviceId();
 
                 instancesView.setText(out.toString());
                 renderInstanceCards(matchedInstances);
+
+                boolean globalSearchMode = serverFilter.isEmpty() && !filter.isEmpty();
+
+                if (globalSearchMode) {
+                    if (serverCardsContainer != null) {
+                        serverCardsContainer.setVisibility(View.GONE);
+                    }
+                    if (instanceCardsContainer != null) {
+                        instanceCardsContainer.setVisibility(View.VISIBLE);
+                    }
+                }
 
                 /*
                  * Do not clear the selected instance while refreshing the list.
