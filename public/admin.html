@@ -142,113 +142,44 @@
             </table>
           </div>
         </div>
-
-        <details class="ignored-remotes">
-          <summary>Ignored Remotes</summary>
-          <div id="ignoredRemotesList" class="muted-list"></div>
-        </details>
-      </section>
-    </section>
-
+</section>
     <section class="panel">
       <div class="panel-heading">
         <div>
           <h2>Mobile Client Authorization</h2>
-            <p>Approve viewers, approve operators, or revoke mobile devices.</p>
-          </div>
+          <p>Approve viewers, approve operators, or revoke mobile devices.</p>
         </div>
-
-        <div class="table-wrap small-table selectable-table" tabindex="0" data-table="clientsTable">
-          <table id="clientsTable">
-            <thead>
-              <tr>
-                <th data-sort="device_name">Device</th>
-                <th data-sort="status">Status</th>
-                <th data-sort="role">Role</th>
-                <th data-sort="last_seen_at">Last Seen</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody id="clientsBody"></tbody>
-          </table>
-        </div>
-    </section>
-
-    <section class="card">
-      <div class="section-title">
-        <div>
-          <h2>Operation Definitions</h2>
-          <p class="note">Data-driven mobile API operations. Enable only operations you want mobile clients to discover and request.</p>
-        </div>
-        <button id="refreshOperationsBtn" class="btn" onclick="loadOperations()">Refresh Operations</button>
       </div>
 
-      <div id="operationsPreview" class="subtle-panel">
-        Loading mobile discovery preview...
-      </div>
-
-      <details class="operation-dry-run-panel">
-        <summary>
-          <strong>Advanced Operation Testing</strong>
-          <span class="note">Dry-run a mobile operation request without executing it.</span>
-        </summary>
-
-        <div class="operation-dry-run-header">
-          <strong>Operation Dry Run</strong>
-          <span class="note">Validate the operation catalog, role guardrails, target parsing, and rendered Incus argv.</span>
-        </div>
-
-        <div class="operation-dry-run-grid">
-          <label>
-            Operation
-            <select id="dryRunOperation"></select>
-          </label>
-
-          <label>
-            Target Type
-            <input id="dryRunTargetType" value="instance" />
-          </label>
-
-          <label>
-            Target ID
-            <input id="dryRunTargetId" placeholder="mondo:default:Test1" />
-          </label>
-
-          <label>
-            Simulated Role
-            <select id="dryRunRole">
-              <option value="viewer">viewer</option>
-              <option value="operator" selected>operator</option>
-              <option value="admin">admin</option>
-            </select>
-          </label>
-
-          <button id="dryRunBtn" class="btn primary" type="button" onclick="runOperationDryRun()">Dry Run</button>
-        </div>
-
-        <pre id="dryRunResult" class="dry-run-result muted">No dry run yet.</pre>
-      </details>
-
-      <div class="table-wrap selectable-table" data-table="operationsTable" tabindex="0">
-        <table id="operationsTable">
+      <div class="table-wrap small-table selectable-table" tabindex="0" data-table="clientsTable">
+        <table id="clientsTable">
           <thead>
             <tr>
-              <th>Operation</th>
-              <th>Label</th>
-              <th>Enabled</th>
-              <th>Minimum Role</th>
-              <th>Target Type</th>
+              <th data-sort="device_name">Device</th>
+              <th data-sort="status">Status</th>
+              <th data-sort="role">Role</th>
+              <th data-sort="last_seen_at">Last Seen</th>
               <th>Actions</th>
             </tr>
           </thead>
-          <tbody id="operationsBody">
-            <tr>
-              <td colspan="8" class="muted">Loading operation definitions...</td>
-            </tr>
-          </tbody>
+          <tbody id="clientsBody"></tbody>
         </table>
       </div>
     </section>
+
+
+    <section class="panel">
+      <div class="panel-heading">
+        <div>
+          <h2>Mobile Role Policy</h2>
+          <p>Defines what each mobile client role can do. Use the global switch to enable or disable all mobile actions.</p>
+        </div>
+      </div>
+
+      <div id="rolePolicyCards"></div>
+    </section>
+
+
 
 <section class="panel">
       <div class="panel-heading">
@@ -331,6 +262,6 @@
 
   </main>
 
-  <script src="/public/admin.js?v=0.4.11-global-actions"></script>
+  <script src="/public/admin.js?v=0.4.14-mobile-actions-render-fix"></script>
 </body>
 </html>

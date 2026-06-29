@@ -326,48 +326,19 @@ async function loadAudit() {
 
 
 
-function renderOperationsPreview() {
-  const el = $('operationsPreview');
 
-  if (!el) return;
 
-  if (!state.operationsPreview || state.operationsPreview.length === 0) {
-    el.innerHTML = '<span class="muted">No discovery preview available.</span>';
-    return;
-  }
 
-  el.innerHTML = `
-    <div class="operations-preview-heading">
-      <strong>Mobile Action Discovery Preview</strong>
-      <span class="note">Shows which enabled operations each mobile role can request. Viewer clients still have read-only inventory access.</span>
-    </div>
-    <div class="operations-preview-grid">
-      ${state.operationsPreview.map((entry) => {
-        const operations = entry.operations || [];
-        const names = operations.map((op) => op.operation);
 
-        return `
-          <div class="operations-preview-card">
-            <div class="operations-preview-role">${escapeHtml(entry.role)}</div>
-            <div class="operations-preview-list">
-              ${
-                names.length
-                  ? names.map((name) => bubble(name, 'remote')).join(' ')
-                  : `${bubble('Read-only access', 'remote')}`
-              }
-            </div>
-          </div>
-        `;
-      }).join('')}
-    </div>
-  `;
-}
 
-async function loadOperationsPreview() {
-  const data = await fetchJson('/api/admin/operations-preview');
-  state.operationsPreview = data.preview || [];
-  renderOperationsPreview();
-}
+
+
+
+
+
+
+
+
 
 
 function renderDryRunOperationOptions() {
@@ -475,96 +446,9 @@ async function runOperationDryRun() {
   }
 }
 
-function renderMobileActionsStatus() {
-  const table = $('operationsTable');
-  if (!table || !table.parentElement) {
-    return;
-  }
 
-  let panel = $('mobileActionsPanel');
-  if (!panel) {
-    panel = document.createElement('div');
-    panel.id = 'mobileActionsPanel';
-    panel.style.display = 'flex';
-    panel.style.alignItems = 'center';
-    panel.style.justifyContent = 'space-between';
-    panel.style.gap = '12px';
-    panel.style.flexWrap = 'wrap';
-    panel.style.margin = '10px 0 12px 0';
-    panel.style.padding = '12px';
-    panel.style.border = '1px solid rgba(56, 189, 248, 0.35)';
-    panel.style.borderRadius = '12px';
-    panel.style.background = 'rgba(14, 165, 233, 0.08)';
 
-    table.parentElement.insertBefore(panel, table);
-  }
 
-  const status = state.mobileActions;
-
-  if (!status) {
-    panel.innerHTML = `
-      <div>
-        <strong>Global Mobile Actions</strong><br>
-        <span class="note">
-          Master server switch for Start, Stop, Restart, and Shell discovery/execution.
-        </span>
-      </div>
-      <div class="actions" style="align-items:center;">
-        ${bubble('Loading', 'neutral')}
-      </div>
-    `;
-
-    fetchJson('/api/admin/mobile-actions')
-      .then((data) => {
-        state.mobileActions = data.mobile_actions || null;
-        renderMobileActionsStatus();
-      })
-      .catch((err) => {
-        panel.innerHTML = `
-          <div>
-            <strong>Global Mobile Actions</strong><br>
-            <span class="note bad">Could not load global mobile actions status: ${escapeHtml(err.message || err)}</span>
-          </div>
-          <div class="actions" style="align-items:center;">
-            ${bubble('Error', 'bad')}
-          </div>
-        `;
-      });
-
-    return;
-  }
-
-  const effective = status.effective_enabled === true;
-  const hardEnabled = status.hard_enabled === true;
-  const serverEnabled = status.server_enabled === true;
-
-  const statusText = effective
-    ? 'Enabled'
-    : hardEnabled
-      ? 'Disabled by server switch'
-      : 'Disabled by .env hard switch';
-
-  const nextEnabled = !serverEnabled;
-  const buttonLabel = serverEnabled ? 'Disable All Mobile Actions' : 'Enable All Mobile Actions';
-
-  panel.innerHTML = `
-    <div>
-      <strong>Global Mobile Actions</strong><br>
-      <span class="note">
-        Master server switch for Start, Stop, Restart, and Shell discovery/execution.
-        .env hard switch: ${hardEnabled ? 'enabled' : 'disabled'}.
-      </span>
-    </div>
-    <div class="actions" style="align-items:center;">
-      ${bubble(statusText, effective ? 'good' : 'bad')}
-      <button
-        class="btn ${serverEnabled ? 'danger' : 'primary'}"
-        onclick="setGlobalMobileActionsEnabled(${nextEnabled})"
-        ${hardEnabled ? '' : 'disabled title="MOBILE_ACTIONS_ENABLED=false in .env is the hard safety override"'}
-      >${escapeHtml(buttonLabel)}</button>
-    </div>
-  `;
-}
 
 async function setGlobalMobileActionsEnabled(enabled) {
   try {
@@ -598,55 +482,8 @@ async function setGlobalMobileActionsEnabled(enabled) {
   }
 }
 
-function renderOperations() {
-  renderMobileActionsStatus();
 
-  const body = $('operationsBody');
 
-  if (!body) return;
-
-  if (!state.operations || state.operations.length === 0) {
-    body.innerHTML = `
-      <tr>
-        <td colspan="8" class="muted">No operation definitions found.</td>
-      </tr>
-    `;
-    return;
-  }
-
-  renderDryRunOperationOptions();
-
-  body.innerHTML = state.operations.map((op) => {
-    const enabledText = op.enabled ? 'Enabled' : 'Disabled';
-    const enabledType = op.enabled ? 'good' : 'bad';
-    const nextEnabled = op.enabled ? 'false' : 'true';
-    const nextLabel = op.enabled ? 'Disable' : 'Enable';
-    return `
-      <tr>
-        <td>${bubble(op.operation_key, 'remote')}</td>
-        <td>
-          <strong>${escapeHtml(op.label || op.operation_key)}</strong><br>
-          <span class="note">${escapeHtml(op.description || '')}</span>
-        </td>
-        <td>${bubble(enabledText, enabledType)}</td>
-        <td>
-          <select onchange="changeOperationRole('${escapeHtml(op.operation_key)}', this.value)">
-            <option value="operator" ${op.role_required === 'operator' ? 'selected' : ''}>operator</option>
-            <option value="admin" ${op.role_required === 'admin' ? 'selected' : ''}>admin</option>
-          </select>
-        </td>
-        <td>${bubble(op.target_type || '-', 'neutral')}</td>
-        <td>
-          <div class="actions">
-            <button class="btn ${op.enabled ? 'danger' : 'primary'}" onclick="setOperationEnabled('${escapeHtml(op.operation_key)}', ${nextEnabled})">${nextLabel}</button>
-          </div>
-        </td>
-      </tr>
-    `;
-  }).join('');
-
-  reapplyTableSelection('operationsTable');
-}
 
 async function loadOperations() {
   const data = await fetchJson('/api/admin/operations');
@@ -1044,7 +881,7 @@ async function loadData() {
       fetchJson('/api/mobile/instances'),
       fetchJson('/api/admin/clients'),
       fetchJson('/api/admin/operations'),
-      fetchJson('/api/admin/operations-preview')
+      Promise.resolve({ preview: [] })
     ]);
 
     state.health = health;
@@ -1055,7 +892,7 @@ async function loadData() {
     state.instances = instancesData.instances || [];
     state.clients = clientsData.clients || [];
     state.operations = operationsData.operations || [];
-    state.operationsPreview = operationsPreviewData.preview || [];
+    state.operationsPreview = [];
 
     renderStatus();
     renderSummary();
@@ -1368,3 +1205,217 @@ function init() {
 }
 
 document.addEventListener('DOMContentLoaded', init);
+
+
+
+
+
+
+
+
+
+/*
+ * Final V1.0 Mobile Role Policy renderer.
+ * This intentionally overrides earlier development-operation renderers.
+ */
+function renderOperations() {
+  const el = $('rolePolicyCards');
+  if (!el) {
+    return;
+  }
+
+  el.innerHTML = `
+    <div class="role-policy-grid">
+      <div class="policy-card">
+        <div class="policy-role viewer">Viewer</div>
+        <div class="policy-title">Read-only inventory access</div>
+        <div class="policy-text">
+          Viewers can see configured remotes, instances, status, IP addresses, and inventory details.
+          They cannot start, stop, restart, or open shell sessions.
+        </div>
+      </div>
+
+      <div class="policy-card">
+        <div class="policy-role operator">Operator</div>
+        <div class="policy-title">Instance power control</div>
+        <div class="policy-text">
+          Operators can start, stop, and restart Incus containers and virtual machines.
+          They do not have shell access.
+        </div>
+      </div>
+
+      <div class="policy-card">
+        <div class="policy-role admin">Admin</div>
+        <div class="policy-title">Full mobile operations</div>
+        <div class="policy-text">
+          Admins can start, stop, restart, and open shell sessions into running Incus containers.
+          Shell access is restricted to admins only.
+        </div>
+      </div>
+
+      <div class="policy-card global">
+        <div class="policy-role global">Global Mobile Actions</div>
+        <div class="policy-title">Master safety switch</div>
+        <div class="policy-text">
+          When disabled, no mobile client receives action buttons and the server rejects all mobile
+          start, stop, restart, and shell requests. Inventory remains read-only.
+        </div>
+      </div>
+    </div>
+  `;
+
+  renderMobileActionsStatus();
+}
+
+function renderOperationsPreview() {
+  state.operationsPreview = [];
+}
+
+async function loadOperationsPreview() {
+  state.operationsPreview = [];
+}
+
+
+/*
+ * Final V1.0 Global Mobile Actions renderer.
+ * This intentionally overrides any earlier development-operation UI fragments.
+ */
+function renderMobileActionsStatus() {
+  const anchor = $('rolePolicyCards');
+  if (!anchor || !anchor.parentElement) {
+    return;
+  }
+
+  let panel = $('mobileActionsPanel');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'mobileActionsPanel';
+    panel.style.display = 'flex';
+    panel.style.alignItems = 'center';
+    panel.style.justifyContent = 'space-between';
+    panel.style.gap = '12px';
+    panel.style.flexWrap = 'wrap';
+    panel.style.margin = '10px 0 18px 0';
+    panel.style.padding = '12px';
+    panel.style.border = '1px solid rgba(56, 189, 248, 0.35)';
+    panel.style.borderRadius = '12px';
+    panel.style.background = 'rgba(14, 165, 233, 0.08)';
+
+    anchor.parentElement.insertBefore(panel, anchor);
+  }
+
+  const status = state.mobileActions;
+
+  if (!status) {
+    panel.innerHTML = `
+      <div>
+        <strong>Global Mobile Actions</strong><br>
+        <span class="note">Master switch for all mobile Start, Stop, Restart, and Shell actions.</span>
+      </div>
+      <div class="actions" style="align-items:center;">
+        ${bubble('Loading', 'neutral')}
+      </div>
+    `;
+
+    fetchJson('/api/admin/mobile-actions')
+      .then((data) => {
+        state.mobileActions = data.mobile_actions || null;
+        renderMobileActionsStatus();
+      })
+      .catch((err) => {
+        panel.innerHTML = `
+          <div>
+            <strong>Global Mobile Actions</strong><br>
+            <span class="note bad">Could not load global mobile actions status: ${escapeHtml(err.message || err)}</span>
+          </div>
+          <div class="actions" style="align-items:center;">
+            ${bubble('Error', 'bad')}
+          </div>
+        `;
+      });
+
+    return;
+  }
+
+  const effective = status.effective_enabled === true;
+  const hardEnabled = status.hard_enabled === true;
+  const serverEnabled = status.server_enabled === true;
+  const nextEnabled = !serverEnabled;
+  const buttonLabel = serverEnabled ? 'Disable All Mobile Actions' : 'Enable All Mobile Actions';
+
+  panel.innerHTML = `
+    <div>
+      <strong>Global Mobile Actions</strong><br>
+      <span class="note">Master switch for all mobile Start, Stop, Restart, and Shell actions.</span>
+    </div>
+    <div class="actions" style="align-items:center;">
+      ${bubble(effective ? 'Enabled' : 'Disabled', effective ? 'good' : 'bad')}
+      <button
+        class="btn ${serverEnabled ? 'danger' : 'primary'}"
+        onclick="setGlobalMobileActionsEnabled(${nextEnabled})"
+        ${hardEnabled ? '' : 'disabled title="MOBILE_ACTIONS_ENABLED=false in .env is the hard safety override"'}
+      >${escapeHtml(buttonLabel)}</button>
+    </div>
+  `;
+}
+
+
+/*
+ * Final V1.0 Mobile Role Policy renderer.
+ */
+function renderOperations() {
+  const el = $('rolePolicyCards');
+  if (!el) {
+    return;
+  }
+
+  el.innerHTML = `
+    <div class="role-policy-grid">
+      <div class="policy-card">
+        <div class="policy-role viewer">Viewer</div>
+        <div class="policy-title">Read-only inventory access</div>
+        <div class="policy-text">
+          Viewers can see configured remotes, instances, status, IP addresses, and inventory details.
+          They cannot start, stop, restart, or open shell sessions.
+        </div>
+      </div>
+
+      <div class="policy-card">
+        <div class="policy-role operator">Operator</div>
+        <div class="policy-title">Instance power control</div>
+        <div class="policy-text">
+          Operators can start, stop, and restart Incus containers and virtual machines.
+          They do not have shell access.
+        </div>
+      </div>
+
+      <div class="policy-card">
+        <div class="policy-role admin">Admin</div>
+        <div class="policy-title">Full mobile operations</div>
+        <div class="policy-text">
+          Admins can start, stop, restart, and open shell sessions into running Incus containers.
+          Shell access is restricted to admins only.
+        </div>
+      </div>
+
+      <div class="policy-card global">
+        <div class="policy-role global">Global Mobile Actions</div>
+        <div class="policy-title">Master safety switch</div>
+        <div class="policy-text">
+          When disabled, no mobile client receives action buttons and the server rejects all mobile
+          start, stop, restart, and shell requests. Inventory remains read-only.
+        </div>
+      </div>
+    </div>
+  `;
+
+  renderMobileActionsStatus();
+}
+
+function renderOperationsPreview() {
+  state.operationsPreview = [];
+}
+
+async function loadOperationsPreview() {
+  state.operationsPreview = [];
+}
