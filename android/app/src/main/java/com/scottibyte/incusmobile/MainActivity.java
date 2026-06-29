@@ -37,6 +37,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -45,7 +46,7 @@ public class MainActivity extends Activity {
     private static final String PREF_SERVER_URL = "server_url";
     private static final String PREF_CLIENT_ROLE = "client_role";
     private static final String DEFAULT_API_BASE_URL = "";
-    private static final String APP_VERSION = "0.3.22";
+    private static final String APP_VERSION = "0.3.26";
     private static final String PREFS_NAME = "scottibyte_incus_mobile";
     private static final String PREF_DEVICE_ID = "device_id";
     private static final String PREF_BEARER_TOKEN = "bearer_token";
@@ -90,6 +91,7 @@ public class MainActivity extends Activity {
     private EditText instanceFilterInput;
     private JSONArray lastInstances = null;
     private String selectedInstanceKey = "";
+    private final HashSet<String> allowedOperations = new HashSet<>();
     private boolean suppressFilterEvents = false;
     private EditText deviceNameInput;
     private final Handler pairingHandler = new Handler(Looper.getMainLooper());
@@ -971,7 +973,7 @@ ensureDeviceId();
 
                 runOnUiThread(() -> setConnectionStatus(result.toDisplayString()));
             } catch (Exception e) {
-                runOnUiThread(() -> setConnectionStatus(errorText(e)));
+                runOnUiThread(() -> showOperationMessage(errorText(e)));
             }
         }).start();
     }
@@ -1065,7 +1067,7 @@ ensureDeviceId();
                     }
                 });
             } catch (Exception e) {
-                runOnUiThread(() -> setConnectionStatus(errorText(e)));
+                runOnUiThread(() -> showOperationMessage(errorText(e)));
             }
         }).start();
     }
@@ -1080,6 +1082,7 @@ ensureDeviceId();
             return;
         }
 
+        fetchMobileOperations();
         setStatus("Loading mobile summary...");
 
         new Thread(() -> {
@@ -2068,6 +2071,244 @@ ensureDeviceId();
         }
     }
 
+    private JSONObject findSelectedInstanceObject() {
+        if (lastInstances == null || selectedInstanceKey == null || selectedInstanceKey.trim().isEmpty()) {
+            return null;
+        }
+
+        try {
+            for (int i = 0; i < lastInstances.length(); i++) {
+                JSONObject item = lastInstances.optJSONObject(i);
+                if (item == null) {
+                    continue;
+                }
+
+                if (selectedInstanceKey.equals(getInstanceKey(item))) {
+                    return item;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+
+        return null;
+    }
+
+
+    private void refreshSelectedInstanceCard() {
+        JSONObject selected = findSelectedInstanceObject();
+        if (selected != null) {
+            renderSelectedInstanceCard(selected);
+        }
+    }
+
+    private boolean hasAllowedOperation(String operation) {
+        return allowedOperations.contains(operation);
+    }
+
+    private void fetchMobileOperations() {
+        if (!hasBearerToken() || !hasServerUrl()) {
+            allowedOperations.clear();
+            return;
+        }
+
+        String token = getBearerToken();
+
+        new Thread(() -> {
+            try {
+                HttpResult result = httpRequest(
+                    "GET",
+                    "/api/mobile/operations",
+                    null,
+                    token
+                );
+
+                if (result.code >= 200 && result.code < 300) {
+                    JSONObject json = new JSONObject(result.body);
+                    JSONArray ops = json.optJSONArray("operations");
+
+                    HashSet<String> nextAllowed = new HashSet<>();
+
+                    if (ops != null) {
+                        for (int i = 0; i < ops.length(); i++) {
+                            JSONObject op = ops.optJSONObject(i);
+                            if (op == null) {
+                                continue;
+                            }
+
+                            String key = op.optString("operation", "");
+                            if (!key.trim().isEmpty()) {
+                                nextAllowed.add(key);
+                            }
+                        }
+                    }
+
+                    runOnUiThread(() -> {
+                        allowedOperations.clear();
+                        allowedOperations.addAll(nextAllowed);
+                        setConnectionStatus("Loaded " + allowedOperations.size() + " mobile operations.");
+
+                        if (lastInstances != null) {
+                            renderInstancesList();
+                            refreshSelectedInstanceCard();
+                        }
+                    });
+                } else {
+                    runOnUiThread(() -> {
+                        allowedOperations.clear();
+                    });
+                }
+            } catch (Exception e) {
+                runOnUiThread(() -> {
+                    allowedOperations.clear();
+                });
+            }
+        }).start();
+    }
+
+    private Button makeInstanceOperationButton(String label, String operation, JSONObject item) {
+        Button button = new Button(this);
+        button.setText(label);
+        button.setAllCaps(false);
+        button.setTextSize(13);
+        button.setTextColor(0xFFFFFFFF);
+        button.setPadding(12, 8, 12, 8);
+        button.setBackground(makeGlassBackground(0xCC1F2937, 0xAA111827, 0x7738BDF8, 1, 18));
+
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+            0,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            1
+        );
+        params.setMargins(0, 12, 10, 0);
+        button.setLayoutParams(params);
+
+        button.setOnClickListener(v -> executeInstanceOperation(operation, item));
+
+        return button;
+    }
+
+    private void addInstanceOperationButtons(LinearLayout card, JSONObject item) {
+        if (card == null || item == null) {
+            return;
+        }
+
+        String role = getClientRoleDisplay();
+        if (!"operator".equalsIgnoreCase(role) && !"admin".equalsIgnoreCase(role)) {
+            return;
+        }
+
+        String status = item.optString("status", "");
+        boolean running = "Running".equalsIgnoreCase(status);
+
+        // Operators/admins should see operation buttons based on instance state.
+        // The server remains the source of truth and will block execution when
+        // MOBILE_ACTIONS_ENABLED=false, the operation is disabled, the role is
+        // insufficient, or the instance is protected.
+        boolean showStart = !running;
+        boolean showStop = running;
+        boolean showRestart = running;
+
+        if (!showStart && !showStop && !showRestart) {
+            return;
+        }
+
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+
+        if (showStart) {
+            row.addView(makeInstanceOperationButton("Start", "instance.start", item));
+        }
+
+        if (showStop) {
+            row.addView(makeInstanceOperationButton("Stop", "instance.stop", item));
+        }
+
+        if (showRestart) {
+            row.addView(makeInstanceOperationButton("Restart", "instance.restart", item));
+        }
+
+        card.addView(row);
+    }
+
+    private void showOperationMessage(String message) {
+        setConnectionStatus(message);
+
+        try {
+            android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_LONG).show();
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void executeInstanceOperation(String operation, JSONObject item) {
+        if (item == null) {
+            showOperationMessage("No instance selected.");
+            return;
+        }
+
+        String token = getBearerToken();
+        if (token == null || token.trim().isEmpty()) {
+            showOperationMessage("Not paired. Pair this device first.");
+            return;
+        }
+
+        String remote = item.optString("remote", "").trim();
+        String project = item.optString("project", "default").trim();
+        String name = item.optString("name", item.optString("instance", item.optString("id", ""))).trim();
+
+        if (remote.isEmpty() || project.isEmpty() || name.isEmpty()) {
+            showOperationMessage("Selected instance is missing remote, project, or name.");
+            return;
+        }
+
+        String targetId = remote + ":" + project + ":" + name;
+        showOperationMessage("Requesting " + operation + " for " + name + "...");
+
+        new Thread(() -> {
+            try {
+                JSONObject body = new JSONObject();
+                body.put("operation", operation);
+                body.put("target_type", "instance");
+                body.put("target_id", targetId);
+
+                HttpResult result = httpRequest(
+                    "POST",
+                    "/api/mobile/operations",
+                    body.toString(),
+                    token
+                );
+
+                JSONObject json = null;
+                try {
+                    json = new JSONObject(result.body);
+                } catch (Exception ignored) {
+                }
+
+                final JSONObject finalJson = json;
+
+                runOnUiThread(() -> {
+                    if (result.code >= 200 && result.code < 300 && finalJson != null && finalJson.optBoolean("ok")) {
+                        showOperationMessage("Operation completed: " + operation);
+                        loadAuthorizedHome();
+                        return;
+                    }
+
+                    String error = "";
+                    if (finalJson != null) {
+                        error = finalJson.optString("error", "");
+                    }
+
+                    if (error.trim().isEmpty()) {
+                        error = result.toDisplayString();
+                    }
+
+                    showOperationMessage(error);
+                });
+            } catch (Exception e) {
+                runOnUiThread(() -> showOperationMessage(errorText(e)));
+            }
+        }).start();
+    }
+
     private void renderSelectedInstanceCard(JSONObject item) {
         if (selectedInstanceCardContainer == null) {
             return;
@@ -2143,6 +2384,7 @@ ensureDeviceId();
 
         card.addView(title);
         card.addView(details);
+        addInstanceOperationButtons(card, item);
 
         selectedInstanceCardContainer.addView(card);
     }
