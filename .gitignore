@@ -29,3 +29,6 @@ android/.gradle/
 android/**/build/
 *.apk
 *.aab
+
+# Docker test runtime data
+docker-test-data/

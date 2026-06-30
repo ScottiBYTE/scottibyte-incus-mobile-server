@@ -1,0 +1,12 @@
+.git
+.gitignore
+node_modules
+npm-debug.log
+data
+docker-test-data
+screenshots
+android/.gradle
+android/app/build
+.env
+.env.*
+*.before-*
