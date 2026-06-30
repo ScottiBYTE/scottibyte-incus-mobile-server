@@ -1018,14 +1018,13 @@ async function setClientRole(id, role, btn) {
       body: JSON.stringify({ role })
     });
 
-    await refreshClientsOnly();
-    await loadAudit();
+    await loadData();
   } catch (err) {
     if (btn) {
       btn.disabled = false;
       btn.textContent = originalText;
     }
-    alert(err.message);
+    alert(err.message || 'Role change failed');
   }
 }
 

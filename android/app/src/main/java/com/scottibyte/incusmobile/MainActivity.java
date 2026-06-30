@@ -1262,6 +1262,19 @@ ensureDeviceId();
                         }
 
                         if ("approved".equals(status)) {
+                            if (hasBearerToken()) {
+                                stopPairingPolling();
+                                refreshTokenStatus();
+                                updateAuthUiVisibility();
+                                String role = json.optString("role", "");
+                                if (role == null || role.trim().isEmpty()) {
+                                    setConnectionStatus("Paired. Token stored locally.");
+                                } else {
+                                    setConnectionStatus("Paired as " + role + ". Token stored locally.");
+                                }
+                                return;
+                            }
+
                             setConnectionStatus("Approved. Waiting for server token...");
                             if (!pairingPollingActive) {
                                 startPairingPolling();
