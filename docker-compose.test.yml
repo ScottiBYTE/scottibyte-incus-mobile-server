@@ -11,7 +11,7 @@ services:
       PORT: "3088"
       DATA_DIR: "/app/data"
       HOME: "/app/data"
-      INCUS_CONFIG: "/app/data/incus-client"
+      INCUS_CONF: "/app/data/incus-client"
       PUID: "1001"
       PGID: "1001"
       APP_TIME_ZONE: "America/Chicago"
