@@ -1018,14 +1018,13 @@ async function setClientRole(id, role, btn) {
       body: JSON.stringify({ role })
     });
 
-    await refreshClientsOnly();
-    await loadAudit();
+    await loadData();
   } catch (err) {
     if (btn) {
       btn.disabled = false;
       btn.textContent = originalText;
     }
-    alert(err.message);
+    alert(err.message || 'Role change failed');
   }
 }
 
@@ -1060,9 +1059,9 @@ async function loadData() {
   try {
     const [health, summaryData, remotesData, instancesData, clientsData, operationsData, operationsPreviewData] = await Promise.all([
       fetchJson('/api/mobile/health'),
-      fetchJson('/api/mobile/summary'),
+      fetchJson('/api/admin/summary'),
       fetchJson('/api/admin/remotes'),
-      fetchJson('/api/mobile/instances'),
+      fetchJson('/api/admin/instances'),
       fetchJson('/api/admin/clients'),
       fetchJson('/api/admin/operations'),
       Promise.resolve({ preview: [] })

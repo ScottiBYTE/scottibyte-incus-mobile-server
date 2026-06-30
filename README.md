@@ -58,6 +58,8 @@ The server also includes a global mobile action switch. When disabled, mobile cl
 
 The recommended deployment model is Docker Compose.
 
+The example below uses a host data directory named `docker-data`. This directory is runtime state and should not be committed to Git.
+
 ```yaml
 services:
   incus-mobile-server:
@@ -72,7 +74,13 @@ services:
       APP_NAME: "ScottiBYTE Incus Mobile Server"
       PORT: "3088"
       DATA_DIR: "/app/data"
+      HOME: "/app/data"
+      INCUS_CONF: "/app/data/incus-client"
       APP_TIME_ZONE: "America/Chicago"
+
+      # Set these to the UID/GID that should own the bind-mounted data directory.
+      PUID: "1000"
+      PGID: "1000"
 
       TRUST_PROXY: "true"
       ADMIN_ALLOWED_CIDRS: "127.0.0.1/32,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
@@ -83,7 +91,7 @@ services:
       MOBILE_PROTECTED_INSTANCES: "IncusMobileServer"
 
     volumes:
-      - ./data:/app/data
+      - ./docker-data:/app/data
 
     # Option A: use your LAN DNS servers.
     # dns:
@@ -108,6 +116,44 @@ Then open:
 ```text
 http://<docker-host>:3088/admin
 ```
+
+### Docker Runtime Data
+
+The container stores persistent application data in:
+
+```text
+/app/data
+```
+
+With the compose example above, that is persisted on the Docker host as:
+
+```text
+./docker-data
+```
+
+Persistent data includes:
+
+- SQLite database
+- Admin settings
+- Mobile client authorizations
+- Operation policy
+- Audit history
+- SSH key used by the Add Incus Server workflow
+- Incus client configuration and trusted remote certificates
+
+The Incus CLI reads its persistent client configuration from:
+
+```text
+/app/data/incus-client
+```
+
+This is controlled by:
+
+```yaml
+INCUS_CONF: "/app/data/incus-client"
+```
+
+New installs do **not** need to manually create or copy an Incus client configuration. The normal workflow is to start the container, complete first-run admin setup, and add Incus servers from the web UI. The server will create and persist the Incus client trust data under `docker-data/incus-client`.
 
 ## Incus Server Name Resolution
 
@@ -168,7 +214,7 @@ Each Incus server you add must have:
 - Incus API reachable on the configured port, usually `8443`
 - Firewall rules allowing the container to reach SSH and the Incus API
 
-The server image should include the client-side tools needed to perform this workflow, such as the Incus CLI, OpenSSH client, and SSH password support.
+The server image includes the client-side tools needed to perform this workflow, including the Incus CLI and OpenSSH client.
 
 ## First-Run Setup
 
@@ -206,6 +252,8 @@ Mobile clients appear in the admin dashboard as pending clients until authorized
 - Operator
 - Admin
 
+Mobile inventory and operation endpoints require an approved mobile bearer token. The health endpoint is public so the Android app can verify basic connectivity before pairing.
+
 ## Audit Log
 
 The Recent Activity section records administrative and operational activity, including:
@@ -236,6 +284,14 @@ If you lose access to the web admin account or 2FA device, use the local reset c
 scottibyte-incus-mobile-reset-admin
 ```
 
+For the Docker deployment, the reset command should target the active Docker data directory, for example:
+
+```text
+/home/scott/scottibyte-incus-mobile-server/docker-data/mobile.db
+```
+
+The Docker-primary reset helper restarts the Docker container after clearing the admin credentials and sessions.
+
 This resets only the web admin account and clears admin sessions.
 
 It does **not** remove:
@@ -248,21 +304,45 @@ It does **not** remove:
 
 After running the reset, visit `/admin` to complete first-run admin setup again.
 
+## Migrating From a Previous Non-Docker Install
+
+Existing installs can be migrated by stopping the old service, copying the previous data directory into the Docker runtime data directory, and starting Docker.
+
+Example:
+
+```bash
+sudo systemctl stop scottibyte-incus-mobile-server.service
+
+mkdir -p docker-data
+cp -a data/. docker-data/
+
+docker compose up -d
+```
+
+If the previous deployment used an existing Incus client configuration under the host user's home directory, you may optionally copy it into Docker's Incus client config directory:
+
+```bash
+mkdir -p docker-data/incus-client
+cp -a ~/.config/incus/. docker-data/incus-client/
+```
+
+This migration step is only for existing deployments. New users should add Incus servers through the web UI.
+
+After Docker is verified, the old systemd service can be disabled or removed.
+
 ## Persistent Data
 
-The server stores persistent state in the configured data directory.
-
-For Docker:
+For Docker, persistent data is mounted at:
 
 ```text
 /app/data
 ```
 
-This should be mounted as a volume:
+Recommended host mount:
 
 ```yaml
 volumes:
-  - ./data:/app/data
+  - ./docker-data:/app/data
 ```
 
 Persistent data includes:
@@ -273,6 +353,9 @@ Persistent data includes:
 - Operation policy
 - Audit history
 - Incus client configuration
+- SSH key material used by the server add/trust workflow
+
+Do not commit the persistent data directory to Git.
 
 ## Security Notes
 
@@ -282,6 +365,8 @@ Persistent data includes:
 - Assign mobile clients the least privilege role required.
 - Keep the global mobile action switch disabled when operational changes are not needed.
 - Use protected instances for infrastructure containers that should not be controlled from mobile.
+- Do not enable mobile API auth bypass in production.
+- Treat `docker-data` as sensitive runtime state because it contains the SQLite database and Incus client trust material.
 
 ## Suggested Reverse Proxy
 
@@ -292,6 +377,15 @@ When using a reverse proxy, set:
 ```yaml
 TRUST_PROXY: "true"
 ```
+
+The container can be mapped to any host port. For example, this maps host port `3099` to the server's internal port `3088`:
+
+```yaml
+ports:
+  - "3099:3088"
+```
+
+The server log will still say it is listening on port `3088` because that is the port inside the container.
 
 ## Project Status
 

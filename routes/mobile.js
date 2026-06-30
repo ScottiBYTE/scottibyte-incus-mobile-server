@@ -1,11 +1,10 @@
 const express = require('express');
 const { getMobileActionsStatus } = require('../operations');
 const { getAllInstances, getRemotes, runInstanceAction } = require('../incus');
-const { allowAdminBypass, requireMobileAuth } = require('../auth');
+const { requireMobileAuth } = require('../auth');
 
 const router = express.Router();
 
-router.use(allowAdminBypass);
 
 router.get('/health', async (req, res) => {
   res.json({
@@ -18,7 +17,7 @@ router.get('/health', async (req, res) => {
   });
 });
 
-router.get('/remotes', async (req, res) => {
+router.get('/remotes', requireMobileAuth, async (req, res) => {
   try {
     const remotes = await getRemotes();
     res.json({ ok: true, remotes });
@@ -27,7 +26,7 @@ router.get('/remotes', async (req, res) => {
   }
 });
 
-router.get('/instances', async (req, res) => {
+router.get('/instances', requireMobileAuth, async (req, res) => {
   try {
     const instances = await getAllInstances();
 
@@ -42,7 +41,7 @@ router.get('/instances', async (req, res) => {
   }
 });
 
-router.get('/summary', async (req, res) => {
+router.get('/summary', requireMobileAuth, async (req, res) => {
   try {
     const instances = await getAllInstances();
     const valid = instances.filter(i => !i.error);
@@ -80,7 +79,7 @@ router.get('/summary', async (req, res) => {
 });
 
 
-router.get('/instances/:id', async (req, res) => {
+router.get('/instances/:id', requireMobileAuth, async (req, res) => {
   try {
     const requestedId = decodeURIComponent(req.params.id);
     const instances = await getAllInstances();
@@ -123,8 +122,8 @@ function canRunAction(client, instance, action) {
     return { ok: false, reason: 'Mobile actions disabled' };
   }
 
-  if (!client || client.role !== 'operator') {
-    return { ok: false, reason: 'Operator role required' };
+  if (!client || !['operator', 'admin'].includes(client.role)) {
+    return { ok: false, reason: 'Operator or admin role required' };
   }
 
   if (isProtectedInstance(instance)) {

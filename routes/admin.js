@@ -1,7 +1,7 @@
 const express = require('express');
 const crypto = require('crypto');
 const { db } = require('../db');
-const { getRemoteInventory, addRemoteViaSsh, removeRemote, testRemote } = require('../incus');
+const { getAllInstances, getRemoteInventory, addRemoteViaSsh, removeRemote, testRemote } = require('../incus');
 const { logAuditEvent, listAuditEvents, listAuditEventsForExport, getAdminActor } = require('../audit');
 const {
   listOperationDefinitionsForRole,
@@ -153,6 +153,49 @@ router.get('/audit-events/export.json', (req, res) => {
 function nowIso() {
   return new Date().toISOString();
 }
+
+
+router.get('/summary', async (req, res) => {
+  try {
+    const instances = await getAllInstances();
+    const valid = instances.filter(i => !i.error);
+
+    const running = valid.filter(i => i.status === 'Running').length;
+    const stopped = valid.filter(i => i.status === 'Stopped').length;
+    const notRunning = valid.length - running;
+
+    res.json({
+      ok: true,
+      generated_at: new Date().toISOString(),
+      summary: {
+        containers_total: valid.filter(i => i.type === 'container').length,
+        virtual_machines_total: valid.filter(i => i.type === 'virtual-machine').length,
+        instances_total: valid.length,
+        running,
+        stopped,
+        not_running: notRunning,
+        errors: instances.filter(i => i.error).length
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+router.get('/instances', async (req, res) => {
+  try {
+    const instances = await getAllInstances();
+
+    res.json({
+      ok: true,
+      generated_at: new Date().toISOString(),
+      count: instances.filter(i => !i.error).length,
+      instances
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
 
 function makeToken() {
   return crypto.randomBytes(32).toString('hex');
