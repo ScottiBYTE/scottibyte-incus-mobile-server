@@ -63,7 +63,7 @@ The example below uses a host data directory named `docker-data`. This directory
 ```yaml
 services:
   incus-mobile-server:
-    image: scottibyte/incus-mobile-server:1.0.0
+    image: scottibyte/incus-mobile-server:latest
     container_name: scottibyte-incus-mobile-server
     restart: unless-stopped
 
