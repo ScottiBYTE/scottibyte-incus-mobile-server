@@ -1059,9 +1059,9 @@ async function loadData() {
   try {
     const [health, summaryData, remotesData, instancesData, clientsData, operationsData, operationsPreviewData] = await Promise.all([
       fetchJson('/api/mobile/health'),
-      fetchJson('/api/mobile/summary'),
+      fetchJson('/api/admin/summary'),
       fetchJson('/api/admin/remotes'),
-      fetchJson('/api/mobile/instances'),
+      fetchJson('/api/admin/instances'),
       fetchJson('/api/admin/clients'),
       fetchJson('/api/admin/operations'),
       Promise.resolve({ preview: [] })
