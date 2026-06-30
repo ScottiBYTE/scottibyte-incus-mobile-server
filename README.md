@@ -58,8 +58,6 @@ The server also includes a global mobile action switch. When disabled, mobile cl
 
 The recommended deployment model is Docker Compose.
 
-The example below uses a host data directory named `docker-data`. This directory is runtime state and should not be committed to Git.
-
 ```yaml
 services:
   incus-mobile-server:
