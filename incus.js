@@ -28,9 +28,12 @@ async function getRemotes() {
 }
 
 function normalizeRemoteEntry(name, remote) {
+  const addrs = remote.Addrs || remote.addrs || [];
+  const firstAddr = Array.isArray(addrs) && addrs.length > 0 ? addrs[0] : '';
+
   return {
     name,
-    addr: remote.Addr || remote.addr || '',
+    addr: remote.LastWorkingAddr || remote.last_working_addr || remote.Addr || remote.addr || firstAddr || '',
     protocol: remote.Protocol || remote.protocol || '',
     auth_type: remote.AuthType || remote.auth_type || '',
     project: remote.Project || remote.project || 'default',

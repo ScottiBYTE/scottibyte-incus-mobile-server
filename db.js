@@ -46,6 +46,7 @@ function initDb() {
   `);
 
   ensureColumn('mobile_clients', 'display_name', 'TEXT');
+  ensureColumn('mobile_clients', 'token_claimed_at', 'TEXT');
 }
 
 module.exports = {
