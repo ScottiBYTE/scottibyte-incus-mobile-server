@@ -32,3 +32,4 @@ android/**/build/
 
 # Docker test runtime data
 docker-test-data/
+docker-data/

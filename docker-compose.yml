@@ -1,0 +1,42 @@
+services:
+  incus-mobile-server:
+    build: .
+    container_name: scottibyte-incus-mobile-server
+    restart: unless-stopped
+    ports:
+      - "3099:3088"
+
+    environment:
+      APP_NAME: "ScottiBYTE Incus Mobile Server"
+      PORT: "3088"
+      DATA_DIR: "/app/data"
+      HOME: "/app/data"
+      INCUS_CONF: "/app/data/incus-client"
+      PUID: "1001"
+      PGID: "1001"
+      APP_TIME_ZONE: "America/Chicago"
+
+      TRUST_PROXY: "true"
+      ADMIN_ALLOWED_CIDRS: "127.0.0.1/32,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+
+      ADMIN_BYPASS_MOBILE_AUTH: "false"
+      MOBILE_ACTIONS_ENABLED: "true"
+      MOBILE_TERMINAL_ENABLED: "true"
+      MOBILE_TERMINAL_IDLE_TIMEOUT_MS: "900000"
+      MOBILE_PROTECTED_INSTANCES: "IncusMobileServer"
+
+    volumes:
+      - ./docker-data:/app/data
+
+    # Option 1: use IP addresses in the Add Incus Server form.
+
+    # Option 2: use your LAN DNS servers.
+    # dns:
+    #   - 172.16.1.10
+    #   - 172.16.1.11
+
+    # Option 3: define static host mappings for Incus servers.
+    # extra_hosts:
+    #   - "mondo:172.16.1.225"
+    #   - "vmsmist:172.16.1.50"
+    #   - "vmsrain:172.16.1.51"
