@@ -484,6 +484,7 @@ async function testRemote(name) {
     const stdout = await runIncus([
       'list',
       `${safeName}:`,
+      '--all-projects',
       '--format',
       'json'
     ], 30000);
@@ -511,6 +512,7 @@ async function getInstancesForRemote(remote) {
   const stdout = await runIncus([
     'list',
     `${remote.name}:`,
+    '--all-projects',
     '--format',
     'json'
   ]);
