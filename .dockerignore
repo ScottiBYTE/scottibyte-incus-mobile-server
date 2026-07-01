@@ -5,8 +5,7 @@ npm-debug.log
 data
 docker-test-data
 screenshots
-android/.gradle
-android/app/build
+android/
 .env
 .env.*
 *.before-*
