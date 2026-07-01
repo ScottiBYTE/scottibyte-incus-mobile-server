@@ -1,4 +1,4 @@
-FROM node:22-bookworm-slim
+FROM node:26-trixie-slim
 
 ENV NODE_ENV=production
 ENV APP_HOME=/app
@@ -22,7 +22,7 @@ RUN apt-get update \
       g++ \
     && install -d -m 0755 /etc/apt/keyrings \
     && curl -fsSL https://pkgs.zabbly.com/key.asc -o /etc/apt/keyrings/zabbly.asc \
-    && sh -c 'echo "deb [signed-by=/etc/apt/keyrings/zabbly.asc] https://pkgs.zabbly.com/incus/stable bookworm main" > /etc/apt/sources.list.d/zabbly-incus-stable.list' \
+    && sh -c 'echo "deb [signed-by=/etc/apt/keyrings/zabbly.asc] https://pkgs.zabbly.com/incus/stable trixie main" > /etc/apt/sources.list.d/zabbly-incus-stable.list' \
     && apt-get update \
     && apt-get install -y --no-install-recommends incus-client \
     && rm -rf /var/lib/apt/lists/*
