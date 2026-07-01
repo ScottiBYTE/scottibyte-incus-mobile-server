@@ -511,6 +511,7 @@ async function getInstancesForRemote(remote) {
   const stdout = await runIncus([
     'list',
     `${remote.name}:`,
+    '--all-projects',
     '--format',
     'json'
   ]);
