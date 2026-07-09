@@ -543,6 +543,9 @@ router.post('/remotes', async (req, res) => {
       ssh_user: req.body.ssh_user,
       ssh_port: req.body.ssh_port,
       ssh_password: req.body.ssh_password,
+      ssh_auth_method: req.body.ssh_auth_method,
+      ssh_private_key: req.body.ssh_private_key,
+      ssh_key_passphrase: req.body.ssh_key_passphrase,
       trust_name: req.body.trust_name
     });
 

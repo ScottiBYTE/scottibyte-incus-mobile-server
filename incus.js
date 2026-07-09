@@ -233,7 +233,7 @@ function shellQuote(value) {
   return `'${String(value).replace(/'/g, `'\\''`)}'`;
 }
 
-function connectSsh({ host, port, username, password, privateKey }) {
+function connectSsh({ host, port, username, password, privateKey, passphrase }) {
   return new Promise((resolve, reject) => {
     const conn = new Client();
 
@@ -256,6 +256,10 @@ function connectSsh({ host, port, username, password, privateKey }) {
 
     if (privateKey) {
       options.privateKey = privateKey;
+    }
+
+    if (passphrase) {
+      options.passphrase = passphrase;
     }
 
     conn.connect(options);
@@ -301,18 +305,20 @@ function execSshCommand(conn, command, timeoutMs = 30000) {
   });
 }
 
-async function installManagedSshKey({ host, port, username, password }) {
+async function installManagedSshKey({ host, port, username, password, privateKey, passphrase }) {
   const key = ensureAppSshKey();
 
-  if (!password) {
-    throw new Error('SSH password is required the first time this server installs its managed SSH key on a target host');
+  if (!password && !privateKey) {
+    throw new Error('SSH password or private key is required the first time this server installs its managed SSH key on a target host');
   }
 
   const conn = await connectSsh({
     host,
     port,
     username,
-    password
+    password,
+    privateKey,
+    passphrase
   });
 
   try {
@@ -335,7 +341,7 @@ async function installManagedSshKey({ host, port, username, password }) {
   return key;
 }
 
-async function runManagedSshCommand({ host, port, username, command, password }) {
+async function runManagedSshCommand({ host, port, username, command, password, privateKey, passphrase }) {
   const key = ensureAppSshKey();
 
   let conn;
@@ -348,15 +354,17 @@ async function runManagedSshCommand({ host, port, username, command, password })
       privateKey: key.privateKey
     });
   } catch (err) {
-    if (!password) {
-      throw new Error(`Managed SSH key is not trusted by ${username}@${host}. Provide SSH password once so the app can install its public key.`);
+    if (!password && !privateKey) {
+      throw new Error(`Managed SSH key is not trusted by ${username}@${host}. Provide SSH password or private key once so the app can install its public key.`);
     }
 
     await installManagedSshKey({
       host,
       port,
       username,
-      password
+      password,
+      privateKey,
+      passphrase
     });
 
     conn = await connectSsh({
@@ -422,13 +430,26 @@ async function addRemoteViaSsh(options = {}) {
     throw new Error(`Remote "${name}" already exists`);
   }
 
+  const sshAuthMethod = String(options.ssh_auth_method || 'password');
   const sshPassword = String(options.ssh_password || '');
+  const sshPrivateKey = String(options.ssh_private_key || '');
+  const sshKeyPassphrase = String(options.ssh_key_passphrase || '');
+
+  if (sshAuthMethod === 'key' && !sshPrivateKey) {
+    throw new Error('SSH private key is required when SSH auth method is Private Key');
+  }
+
+  if (sshAuthMethod !== 'key' && !sshPassword) {
+    throw new Error('SSH password is required when SSH auth method is Password');
+  }
 
   const sshOutput = await runManagedSshCommand({
     host,
     port: sshPort,
     username: sshUser,
-    password: sshPassword,
+    password: sshAuthMethod === 'key' ? '' : sshPassword,
+    privateKey: sshAuthMethod === 'key' ? sshPrivateKey : '',
+    passphrase: sshAuthMethod === 'key' ? sshKeyPassphrase : '',
     command: `incus config trust add ${shellQuote(trustName)}`
   });
 

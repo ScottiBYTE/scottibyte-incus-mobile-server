@@ -105,8 +105,26 @@
             </label>
 
             <label>
+              <span>SSH Auth</span>
+              <select id="addRemoteSshAuthMethod">
+                <option value="password" selected>Password</option>
+                <option value="key">Private Key</option>
+              </select>
+            </label>
+
+            <label id="addRemoteSshPasswordWrap">
               <span>SSH Password</span>
               <input id="addRemoteSshPassword" type="password" autocomplete="off" placeholder="Used once, not stored">
+            </label>
+
+            <label id="addRemoteSshPrivateKeyWrap" style="display:none">
+              <span>SSH Private Key</span>
+              <textarea id="addRemoteSshPrivateKey" autocomplete="off" rows="4" placeholder="Paste private key. Used once, not stored"></textarea>
+            </label>
+
+            <label id="addRemoteSshKeyPassphraseWrap" style="display:none">
+              <span>Key Passphrase</span>
+              <input id="addRemoteSshKeyPassphrase" type="password" autocomplete="off" placeholder="Optional, used once, not stored">
             </label>
 
             <label>

@@ -283,7 +283,13 @@ function renderRemotes() {
   tbody.innerHTML = remoteRows;
 
   const addBtn = $('addRemoteBtn');
-  if (addBtn) addBtn.addEventListener('click', addRemote);
+  if (addBtn) addBtn.onclick = addRemote;
+
+  const addRemoteSshAuthMethod = $('addRemoteSshAuthMethod');
+  if (addRemoteSshAuthMethod) {
+    addRemoteSshAuthMethod.onchange = updateAddRemoteSshAuthFields;
+    updateAddRemoteSshAuthFields();
+  }
 
   renderIgnoredRemotes();
   updateSortIndicators('remotesTable', state.remoteSort);
@@ -880,19 +886,51 @@ function attachSortHandlers() {
   });
 }
 
+function updateAddRemoteSshAuthFields() {
+  const method = $('addRemoteSshAuthMethod')?.value || 'password';
+  const usingKey = method === 'key';
+
+  if ($('addRemoteSshPasswordWrap')) {
+    $('addRemoteSshPasswordWrap').style.display = usingKey ? 'none' : '';
+  }
+
+  if ($('addRemoteSshPrivateKeyWrap')) {
+    $('addRemoteSshPrivateKeyWrap').style.display = usingKey ? '' : 'none';
+  }
+
+  if ($('addRemoteSshKeyPassphraseWrap')) {
+    $('addRemoteSshKeyPassphraseWrap').style.display = usingKey ? '' : 'none';
+  }
+}
+
 async function addRemote() {
+  const sshAuthMethod = $('addRemoteSshAuthMethod')?.value || 'password';
+
   const payload = {
     name: $('addRemoteName').value.trim(),
     host: $('addRemoteHost').value.trim(),
     incus_port: $('addRemoteIncusPort').value.trim() || '8443',
     ssh_user: $('addRemoteSshUser').value.trim(),
     ssh_port: $('addRemoteSshPort').value.trim() || '22',
-    ssh_password: $('addRemoteSshPassword').value,
+    ssh_auth_method: sshAuthMethod,
+    ssh_password: sshAuthMethod === 'password' ? $('addRemoteSshPassword').value : '',
+    ssh_private_key: sshAuthMethod === 'key' ? $('addRemoteSshPrivateKey').value : '',
+    ssh_key_passphrase: sshAuthMethod === 'key' ? $('addRemoteSshKeyPassphrase').value : '',
     trust_name: $('addRemoteTrustName').value.trim() || 'IncusMobileServer'
   };
 
   if (!payload.name || !payload.host || !payload.ssh_user) {
     alert('Server name, Incus host/address, and SSH user are required.');
+    return;
+  }
+
+  if (payload.ssh_auth_method === 'password' && !payload.ssh_password) {
+    alert('SSH password is required for password authentication.');
+    return;
+  }
+
+  if (payload.ssh_auth_method === 'key' && !payload.ssh_private_key) {
+    alert('SSH private key is required for private key authentication.');
     return;
   }
 
@@ -911,6 +949,12 @@ async function addRemote() {
     alert(err.message);
   } finally {
     $('addRemoteSshPassword').value = '';
+    if ($('addRemoteSshPrivateKey')) {
+      $('addRemoteSshPrivateKey').value = '';
+    }
+    if ($('addRemoteSshKeyPassphrase')) {
+      $('addRemoteSshKeyPassphrase').value = '';
+    }
     btn.disabled = false;
     btn.textContent = 'Add Server';
   }
