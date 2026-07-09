@@ -851,7 +851,72 @@ async function runInstanceAction(id, action) {
 }
 
 
+async function listInstanceSnapshots(id) {
+  const { remote, project, name } = parseInstanceId(id);
+
+  const stdout = await runIncus([
+    'snapshot',
+    'list',
+    `${remote}:${name}`,
+    '--project',
+    project,
+    '--format',
+    'json'
+  ], 30000);
+
+  try {
+    return JSON.parse(stdout || '[]');
+  } catch (err) {
+    throw new Error(`Unable to parse snapshot list: ${err.message}`);
+  }
+}
+
+function defaultSnapshotName() {
+  return `mobile-${new Date()
+    .toISOString()
+    .replace(/[-:]/g, '')
+    .replace(/\..+/, '')}`;
+}
+
+function validateSnapshotName(name) {
+  const value = String(name || '').trim();
+
+  if (!value) {
+    return defaultSnapshotName();
+  }
+
+  if (!/^[A-Za-z0-9._-]+$/.test(value)) {
+    throw new Error('Invalid snapshot name. Use letters, numbers, dots, underscores, and hyphens only.');
+  }
+
+  return value;
+}
+
+async function createInstanceSnapshot(id, requestedName) {
+  const { remote, project, name } = parseInstanceId(id);
+  const snapshotName = validateSnapshotName(requestedName);
+
+  await runIncus([
+    'snapshot',
+    'create',
+    `${remote}:${name}`,
+    snapshotName,
+    '--project',
+    project
+  ], 60000);
+
+  return {
+    ok: true,
+    id,
+    snapshot: snapshotName
+  };
+}
+
+
 module.exports = {
+  validateSnapshotName,
+  createInstanceSnapshot,
+  listInstanceSnapshots,
   getRemotes,
   getAllInstances,
   runInstanceAction,

@@ -1,6 +1,6 @@
 const express = require('express');
 const { getMobileActionsStatus } = require('../operations');
-const { getAllInstances, getRemotes, runInstanceAction } = require('../incus');
+const { getAllInstances, getRemotes, runInstanceAction, listInstanceSnapshots, createInstanceSnapshot } = require('../incus');
 const { requireMobileAuth } = require('../auth');
 
 const router = express.Router();
@@ -149,6 +149,99 @@ async function findInstanceById(id) {
   const instances = await getAllInstances();
   return instances.find(i => i.id === id);
 }
+
+
+function requireSnapshotAdmin(req, res) {
+  const client = req.mobileClient;
+
+  if (!client || client.role !== 'admin') {
+    res.status(403).json({
+      ok: false,
+      error: 'Admin role required'
+    });
+    return false;
+  }
+
+  return true;
+}
+
+router.get('/instances/:id/snapshots', requireMobileAuth, async (req, res) => {
+  try {
+    if (!requireSnapshotAdmin(req, res)) return;
+
+    const requestedId = decodeURIComponent(req.params.id);
+    const instance = await findInstanceById(requestedId);
+
+    if (!instance) {
+      return res.status(404).json({
+        ok: false,
+        error: 'Instance not found',
+        id: requestedId
+      });
+    }
+
+    if (isProtectedInstance(instance)) {
+      return res.status(403).json({
+        ok: false,
+        error: 'Protected instance',
+        id: requestedId
+      });
+    }
+
+    const snapshots = await listInstanceSnapshots(requestedId);
+
+    res.json({
+      ok: true,
+      id: requestedId,
+      snapshots
+    });
+  } catch (err) {
+    res.status(500).json({
+      ok: false,
+      error: err.message
+    });
+  }
+});
+
+router.post('/instances/:id/snapshots', requireMobileAuth, async (req, res) => {
+  try {
+    if (!requireSnapshotAdmin(req, res)) return;
+
+    const requestedId = decodeURIComponent(req.params.id);
+    const instance = await findInstanceById(requestedId);
+
+    if (!instance) {
+      return res.status(404).json({
+        ok: false,
+        error: 'Instance not found',
+        id: requestedId
+      });
+    }
+
+    if (isProtectedInstance(instance)) {
+      return res.status(403).json({
+        ok: false,
+        error: 'Protected instance',
+        id: requestedId
+      });
+    }
+
+    const result = await createInstanceSnapshot(requestedId, req.body?.name);
+
+    res.json({
+      ok: true,
+      id: requestedId,
+      snapshot: result.snapshot,
+      message: `Snapshot created: ${result.snapshot}`
+    });
+  } catch (err) {
+    res.status(500).json({
+      ok: false,
+      error: err.message
+    });
+  }
+});
+
 
 router.post('/instances/:id/actions/:action', requireMobileAuth, async (req, res) => {
   try {
