@@ -207,7 +207,9 @@ The Add Incus Server workflow uses SSH to help establish Incus trust and configu
 Each Incus server you add must have:
 
 - SSH reachable from the container
-- An SSH user and password accepted by the target server
+- An SSH user accepted by the target server
+- Either an SSH password or an SSH private key accepted by the target server
+- Optional SSH private key passphrase support
 - Incus installed and initialized
 - Incus API reachable on the configured port, usually `8443`
 - Firewall rules allowing the container to reach SSH and the Incus API
@@ -235,10 +237,13 @@ From the web dashboard, enter:
 - Incus API port
 - SSH user
 - SSH port
-- SSH password
+- SSH authentication method: Password or Private Key
+- SSH password, or SSH private key with optional passphrase
 - Trust name
 
 The server will attempt to establish Incus trust, add the Incus server locally, and verify connectivity.
+
+SSH credentials are used only for the one-time bootstrap step. They are not stored. After bootstrap, the server uses its app-managed SSH key for future managed SSH operations.
 
 ## Pairing Android Clients
 
