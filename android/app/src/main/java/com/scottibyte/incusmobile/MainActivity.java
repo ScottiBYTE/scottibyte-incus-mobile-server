@@ -55,7 +55,7 @@ public class MainActivity extends Activity {
     private static final String PREF_SERVER_URL = "server_url";
     private static final String PREF_CLIENT_ROLE = "client_role";
     private static final String DEFAULT_API_BASE_URL = "";
-    private static final String APP_VERSION = "0.4.11";
+    private static final String APP_VERSION = "0.5.0";
     private static final String PREFS_NAME = "scottibyte_incus_mobile";
     private static final String PREF_DEVICE_ID = "device_id";
     private static final String PREF_BEARER_TOKEN = "bearer_token";
@@ -2920,6 +2920,27 @@ ensureDeviceId();
         return button;
     }
 
+    private Button makeInstanceActionButton(String label, View.OnClickListener listener) {
+        Button button = new Button(this);
+        button.setText(label);
+        button.setAllCaps(false);
+        button.setTextSize(13);
+        button.setTextColor(0xFFFFFFFF);
+        button.setPadding(12, 8, 12, 8);
+        button.setBackground(makeGlassBackground(0xCC1F2937, 0xAA111827, 0x7738BDF8, 1, 18));
+
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+            0,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            1
+        );
+        params.setMargins(0, 12, 10, 0);
+        button.setLayoutParams(params);
+        button.setOnClickListener(listener);
+
+        return button;
+    }
+
     private void addInstanceOperationButtons(LinearLayout card, JSONObject item) {
         if (!mobileActionsEffectiveEnabled) {
             return;
@@ -2947,8 +2968,9 @@ ensureDeviceId();
             running &&
             container &&
             hasAllowedOperation("instance.shell");
+        boolean showSnapshots = admin;
 
-        if (!showStart && !showStop && !showRestart && !showShell) {
+        if (!showStart && !showStop && !showRestart && !showShell && !showSnapshots) {
             return;
         }
 
@@ -2971,7 +2993,163 @@ ensureDeviceId();
             row.addView(makeInstanceOperationButton("Shell", "instance.shell", item));
         }
 
-        card.addView(row);
+        if (showStart || showStop || showRestart || showShell) {
+            card.addView(row);
+        }
+
+        if (showSnapshots) {
+            LinearLayout snapshotRow = new LinearLayout(this);
+            snapshotRow.setOrientation(LinearLayout.HORIZONTAL);
+            snapshotRow.addView(makeInstanceActionButton("Snapshot", v -> createInstanceSnapshot(item)));
+            snapshotRow.addView(makeInstanceActionButton("Snapshots", v -> showInstanceSnapshots(item)));
+            card.addView(snapshotRow);
+        }
+    }
+
+
+    private String snapshotPathForInstance(JSONObject item) throws Exception {
+        String targetId = buildTargetId(item);
+
+        if (targetId.isEmpty()) {
+            throw new IllegalStateException("Selected instance is missing remote, project, or name.");
+        }
+
+        return "/api/mobile/instances/" + URLEncoder.encode(targetId, "UTF-8") + "/snapshots";
+    }
+
+    private void createInstanceSnapshot(JSONObject item) {
+        if (!isAdminRole()) {
+            showOperationMessage("Admin role required for snapshot management.");
+            return;
+        }
+
+        String token = getBearerToken();
+        if (token == null || token.trim().isEmpty()) {
+            showOperationMessage("Not paired. Pair this device first.");
+            return;
+        }
+
+        String name = item == null ? "instance" : item.optString("name", "instance");
+        showOperationMessage("Creating snapshot for " + name + "...");
+
+        new Thread(() -> {
+            try {
+                HttpResult result = httpRequest(
+                    "POST",
+                    snapshotPathForInstance(item),
+                    "{}",
+                    token
+                );
+
+                JSONObject json = null;
+                try {
+                    json = new JSONObject(result.body);
+                } catch (Exception ignored) {
+                }
+
+                final JSONObject finalJson = json;
+
+                runOnUiThread(() -> {
+                    if (result.code >= 200 && result.code < 300 && finalJson != null && finalJson.optBoolean("ok")) {
+                        String snapshot = finalJson.optString("snapshot", "");
+                        showOperationMessage(snapshot.trim().isEmpty()
+                            ? "Snapshot created."
+                            : "Snapshot created: " + snapshot);
+                        loadInstances();
+                        return;
+                    }
+
+                    String error = finalJson == null ? "" : finalJson.optString("error", "");
+                    if (error.trim().isEmpty()) {
+                        error = result.toDisplayString();
+                    }
+
+                    showOperationMessage(error);
+                });
+            } catch (Exception e) {
+                runOnUiThread(() -> showOperationMessage(errorText(e)));
+            }
+        }).start();
+    }
+
+    private void showInstanceSnapshots(JSONObject item) {
+        if (!isAdminRole()) {
+            showOperationMessage("Admin role required for snapshot management.");
+            return;
+        }
+
+        String token = getBearerToken();
+        if (token == null || token.trim().isEmpty()) {
+            showOperationMessage("Not paired. Pair this device first.");
+            return;
+        }
+
+        String name = item == null ? "instance" : item.optString("name", "instance");
+        showOperationMessage("Loading snapshots for " + name + "...");
+
+        new Thread(() -> {
+            try {
+                HttpResult result = httpRequest(
+                    "GET",
+                    snapshotPathForInstance(item),
+                    null,
+                    token
+                );
+
+                JSONObject json = null;
+                try {
+                    json = new JSONObject(result.body);
+                } catch (Exception ignored) {
+                }
+
+                final JSONObject finalJson = json;
+
+                runOnUiThread(() -> {
+                    if (result.code >= 200 && result.code < 300 && finalJson != null && finalJson.optBoolean("ok")) {
+                        JSONArray snapshots = finalJson.optJSONArray("snapshots");
+                        StringBuilder message = new StringBuilder();
+
+                        if (snapshots == null || snapshots.length() == 0) {
+                            message.append("No snapshots found.");
+                        } else {
+                            for (int i = 0; i < snapshots.length(); i++) {
+                                JSONObject snapshot = snapshots.optJSONObject(i);
+                                if (snapshot == null) {
+                                    continue;
+                                }
+
+                                String snapshotName = snapshot.optString("name", "");
+                                if (!snapshotName.trim().isEmpty()) {
+                                    message.append(snapshotName).append("\n");
+                                }
+                            }
+
+                            if (message.length() == 0) {
+                                message.append("No snapshots found.");
+                            }
+                        }
+
+                        new android.app.AlertDialog.Builder(this)
+                            .setTitle("Snapshots: " + name)
+                            .setMessage(message.toString().trim())
+                            .setPositiveButton("OK", null)
+                            .show();
+
+                        setConnectionStatus("Loaded snapshots for " + name + ".");
+                        return;
+                    }
+
+                    String error = finalJson == null ? "" : finalJson.optString("error", "");
+                    if (error.trim().isEmpty()) {
+                        error = result.toDisplayString();
+                    }
+
+                    showOperationMessage(error);
+                });
+            } catch (Exception e) {
+                runOnUiThread(() -> showOperationMessage(errorText(e)));
+            }
+        }).start();
     }
 
 
