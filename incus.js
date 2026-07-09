@@ -1,4 +1,4 @@
-const { execFile, execFileSync } = require('child_process');
+const { spawn, execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const { Client } = require('ssh2');
@@ -6,11 +6,46 @@ const { getMobileActionsStatus } = require('./operations');
 
 function runIncus(args, timeoutMs = 30000) {
   return new Promise((resolve, reject) => {
-    execFile('incus', args, { timeout: timeoutMs }, (error, stdout, stderr) => {
-      if (error) {
-        reject(new Error(stderr || error.message));
+    const child = spawn('incus', args, {
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+
+    let stdout = '';
+    let stderr = '';
+
+    const timer = setTimeout(() => {
+      child.kill('SIGTERM');
+    }, timeoutMs);
+
+    child.stdout.on('data', (data) => {
+      stdout += data.toString();
+    });
+
+    child.stderr.on('data', (data) => {
+      stderr += data.toString();
+    });
+
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+
+    child.on('close', (code, signal) => {
+      clearTimeout(timer);
+
+      if (code !== 0) {
+        const details = [
+          stderr ? `stderr: ${stderr.trim()}` : null,
+          stdout ? `stdout: ${stdout.trim()}` : null,
+          `code: ${code}`,
+          signal ? `signal: ${signal}` : null,
+          `argv: incus ${args.join(' ')}`
+        ].filter(Boolean).join(' | ');
+
+        reject(new Error(details));
         return;
       }
+
       resolve(stdout);
     });
   });
