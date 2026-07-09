@@ -2,9 +2,11 @@ package com.scottibyte.incusmobile;
 
 import android.app.Activity;
 import android.os.Bundle;
+import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
 import android.content.SharedPreferences;
+import android.content.Intent;
 import android.content.Context;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -80,6 +82,7 @@ public class MainActivity extends Activity {
     private TextView brandTitleView;
     private TextView headerStatsView;
     private Button headerDetailsButton;
+    private Button headerVersionButton;
     private TextView headerDetailsView;
     private boolean headerDetailsVisible = false;
     private boolean headerDetailsManuallyOpened = false;
@@ -96,6 +99,10 @@ public class MainActivity extends Activity {
 
     private String apiBaseUrl = "";
     private String mobileClientRole = "unknown";
+    private String latestAndroidVersion = "";
+    private String latestAndroidApkUrl = "";
+    private String latestAndroidReleaseUrl = "";
+    private boolean androidUpdateAvailable = false;
     private LinearLayout serverConfigPanel;
     private EditText serverUrlInput;
     private Button saveServerUrlButton;
@@ -231,6 +238,23 @@ ensureDeviceId();
 
         headerDetailsView.setVisibility(View.GONE);
 
+        headerVersionButton = new Button(this);
+        headerVersionButton.setAllCaps(false);
+        headerVersionButton.setTextSize(13);
+        headerVersionButton.setTextColor(0xFFFFFFFF);
+        headerVersionButton.setPadding(18, 10, 18, 10);
+        headerVersionButton.setBackground(makeGlassBackground(0xCC10233F, 0xAA07111F, 0x6638BDF8, 1, 28));
+
+        LinearLayout.LayoutParams headerVersionButtonParams = new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        headerVersionButtonParams.setMargins(0, 0, 0, 12);
+        headerVersionButton.setLayoutParams(headerVersionButtonParams);
+        headerVersionButton.setVisibility(View.GONE);
+        headerVersionButton.setOnClickListener(v -> openAndroidUpdateLink());
+        updateAndroidVersionButton();
+
         serverConfigPanel = new LinearLayout(this);
         serverConfigPanel.setOrientation(LinearLayout.VERTICAL);
         serverConfigPanel.setPadding(22, 18, 22, 18);
@@ -342,6 +366,7 @@ ensureDeviceId();
         fixedHeaderLayout.addView(brandRow);
         fixedHeaderLayout.addView(headerDetailsButton);
         fixedHeaderLayout.addView(headerDetailsView);
+        fixedHeaderLayout.addView(headerVersionButton);
         fixedHeaderLayout.addView(serverConfigPanel);
 
         ScrollView scroll = new ScrollView(this);
@@ -1809,6 +1834,9 @@ ensureDeviceId();
         if (!headerDetailsVisible) {
             headerDetailsButton.setText("Connection details ▸");
             headerDetailsView.setVisibility(View.GONE);
+            if (headerVersionButton != null) {
+                headerVersionButton.setVisibility(View.GONE);
+            }
             return;
         }
 
@@ -1824,12 +1852,126 @@ ensureDeviceId();
         headerDetailsView.setText(
             "Server\n" + serverText +
             "\n\nClient\n" + deviceName +
-            "\n\nRole\n" + getClientRoleDisplay() +
-            "\n\nVersion\n" + APP_VERSION
+            "\n\nRole\n" + getClientRoleDisplay()
         );
         headerDetailsView.setVisibility(View.VISIBLE);
+        if (headerVersionButton != null) {
+            updateAndroidVersionButton();
+            headerVersionButton.setVisibility(View.VISIBLE);
+        }
+        fetchAndroidVersionInfo();
         updateServerConfigVisibility();
     }
+    private int compareVersionStrings(String left, String right) {
+        String[] a = left == null ? new String[0] : left.split("\\.");
+        String[] b = right == null ? new String[0] : right.split("\\.");
+        int max = Math.max(a.length, b.length);
+
+        for (int i = 0; i < max; i++) {
+            int av = 0;
+            int bv = 0;
+
+            try {
+                if (i < a.length) {
+                    av = Integer.parseInt(a[i].replaceAll("[^0-9].*$", ""));
+                }
+            } catch (Exception ignored) {
+            }
+
+            try {
+                if (i < b.length) {
+                    bv = Integer.parseInt(b[i].replaceAll("[^0-9].*$", ""));
+                }
+            } catch (Exception ignored) {
+            }
+
+            if (av != bv) {
+                return av - bv;
+            }
+        }
+
+        return 0;
+    }
+
+    private void updateAndroidVersionButton() {
+        if (headerVersionButton == null) {
+            return;
+        }
+
+        String label = "Android " + APP_VERSION;
+
+        if (latestAndroidVersion != null && !latestAndroidVersion.trim().isEmpty()) {
+            if (androidUpdateAvailable) {
+                label += " • Update available: " + latestAndroidVersion;
+            } else {
+                label += " • Current";
+            }
+        } else {
+            label += " • Check for update";
+        }
+
+        headerVersionButton.setText(label);
+    }
+
+    private void openAndroidUpdateLink() {
+        String url = "";
+
+        if (androidUpdateAvailable && latestAndroidApkUrl != null && !latestAndroidApkUrl.trim().isEmpty()) {
+            url = latestAndroidApkUrl.trim();
+        } else if (latestAndroidReleaseUrl != null && !latestAndroidReleaseUrl.trim().isEmpty()) {
+            url = latestAndroidReleaseUrl.trim();
+        } else {
+            url = "https://github.com/ScottiBYTE/scottibyte-incus-mobile-server/releases/latest";
+        }
+
+        try {
+            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+            startActivity(intent);
+        } catch (Exception e) {
+            showOperationMessage("Unable to open update link: " + e.getMessage());
+        }
+    }
+
+    private void fetchAndroidVersionInfo() {
+        if (!hasServerUrl()) {
+            return;
+        }
+
+        new Thread(() -> {
+            try {
+                HttpResult result = httpRequest(
+                    "GET",
+                    "/api/mobile/android-version",
+                    null,
+                    null
+                );
+
+                if (result.code < 200 || result.code >= 300) {
+                    return;
+                }
+
+                JSONObject json = new JSONObject(result.body);
+                if (!json.optBoolean("ok")) {
+                    return;
+                }
+
+                String nextVersion = json.optString("android_version", "").trim();
+                String apkUrl = json.optString("apk_url", "").trim();
+                String releaseUrl = json.optString("release_url", "").trim();
+
+                runOnUiThread(() -> {
+                    latestAndroidVersion = nextVersion;
+                    latestAndroidApkUrl = apkUrl;
+                    latestAndroidReleaseUrl = releaseUrl;
+                    androidUpdateAvailable = !latestAndroidVersion.isEmpty()
+                        && compareVersionStrings(latestAndroidVersion, APP_VERSION) > 0;
+                    updateAndroidVersionButton();
+                });
+            } catch (Exception ignored) {
+            }
+        }).start();
+    }
+
     private void renderHeaderStats() {
         if (headerStatsView == null) {
             return;

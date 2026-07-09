@@ -6,6 +6,20 @@ const { requireMobileAuth } = require('../auth');
 const router = express.Router();
 
 
+const ANDROID_VERSION_INFO = {
+  android_version: '0.5.0',
+  server_release: 'v1.4.0',
+  apk_url: 'https://github.com/ScottiBYTE/scottibyte-incus-mobile-server/releases/download/v1.4.0/ScottiBYTE-Incus-Mobile-Android-v0.5.0-debug.apk',
+  release_url: 'https://github.com/ScottiBYTE/scottibyte-incus-mobile-server/releases/latest'
+};
+
+router.get('/android-version', async (req, res) => {
+  res.json({
+    ok: true,
+    ...ANDROID_VERSION_INFO
+  });
+});
+
 router.get('/health', async (req, res) => {
   res.json({
     ok: true,
