@@ -3000,8 +3000,8 @@ ensureDeviceId();
         if (showSnapshots) {
             LinearLayout snapshotRow = new LinearLayout(this);
             snapshotRow.setOrientation(LinearLayout.HORIZONTAL);
-            snapshotRow.addView(makeInstanceActionButton("Snapshot", v -> createInstanceSnapshot(item)));
-            snapshotRow.addView(makeInstanceActionButton("Snapshots", v -> showInstanceSnapshots(item)));
+            snapshotRow.addView(makeInstanceActionButton("Create Snapshot", v -> createInstanceSnapshot(item)));
+            snapshotRow.addView(makeInstanceActionButton("View Snapshots", v -> showInstanceSnapshots(item)));
             card.addView(snapshotRow);
         }
     }
