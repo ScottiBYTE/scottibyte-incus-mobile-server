@@ -1957,7 +1957,11 @@ ensureDeviceId();
 
                 String nextVersion = json.optString("android_version", "").trim();
                 String apkUrl = json.optString("apk_url", "").trim();
-                String releaseUrl = json.optString("release_url", "").trim();
+                String releaseUrlValue = json.optString("android_release_url", "").trim();
+                if (releaseUrlValue.isEmpty()) {
+                    releaseUrlValue = json.optString("release_url", "").trim();
+                }
+                final String releaseUrl = releaseUrlValue;
 
                 runOnUiThread(() -> {
                     latestAndroidVersion = nextVersion;
