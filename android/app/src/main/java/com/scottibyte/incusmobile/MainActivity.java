@@ -1,6 +1,7 @@
 package com.scottibyte.incusmobile;
 
 import android.app.Activity;
+import android.app.Dialog;
 import android.os.Bundle;
 import android.net.Uri;
 import android.os.Handler;
@@ -10,6 +11,7 @@ import android.content.Intent;
 import android.content.Context;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.ColorDrawable;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.Gravity;
@@ -20,6 +22,7 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.view.View;
+import android.view.Window;
 import android.view.WindowManager;
 import android.view.inputmethod.InputMethodManager;
 import android.view.inputmethod.EditorInfo;
@@ -239,11 +242,9 @@ ensureDeviceId();
         headerDetailsView.setVisibility(View.GONE);
 
         headerVersionButton = new Button(this);
-        headerVersionButton.setAllCaps(false);
-        headerVersionButton.setTextSize(13);
-        headerVersionButton.setTextColor(0xFFFFFFFF);
-        headerVersionButton.setPadding(18, 10, 18, 10);
-        headerVersionButton.setBackground(makeGlassBackground(0xCC10233F, 0xAA07111F, 0x6638BDF8, 1, 28));
+        headerVersionButton.setText("Android App " + APP_VERSION + " • Check update ▸");
+        styleBubbleButton(headerVersionButton);
+        headerVersionButton.setTypeface(Typeface.DEFAULT_BOLD);
 
         LinearLayout.LayoutParams headerVersionButtonParams = new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
@@ -1898,16 +1899,16 @@ ensureDeviceId();
             return;
         }
 
-        String label = "Android " + APP_VERSION;
+        String label = "Android App " + APP_VERSION;
 
         if (latestAndroidVersion != null && !latestAndroidVersion.trim().isEmpty()) {
             if (androidUpdateAvailable) {
-                label += " • Update available: " + latestAndroidVersion;
+                label = "Update Android App to " + latestAndroidVersion + " ▸";
             } else {
                 label += " • Current";
             }
         } else {
-            label += " • Check for update";
+            label += " • Check update ▸";
         }
 
         headerVersionButton.setText(label);
@@ -1918,17 +1919,16 @@ ensureDeviceId();
 
         if (androidUpdateAvailable && latestAndroidApkUrl != null && !latestAndroidApkUrl.trim().isEmpty()) {
             url = latestAndroidApkUrl.trim();
-        } else if (latestAndroidReleaseUrl != null && !latestAndroidReleaseUrl.trim().isEmpty()) {
-            url = latestAndroidReleaseUrl.trim();
         } else {
-            url = "https://github.com/ScottiBYTE/scottibyte-incus-mobile-server/releases/latest";
+            showOperationMessage("Android app is current: " + APP_VERSION);
+            return;
         }
 
         try {
             Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
             startActivity(intent);
         } catch (Exception e) {
-            showOperationMessage("Unable to open update link: " + e.getMessage());
+            showOperationMessage("Unable to open Android update link: " + e.getMessage());
         }
     }
 
@@ -3271,11 +3271,7 @@ ensureDeviceId();
                             }
                         }
 
-                        new android.app.AlertDialog.Builder(this)
-                            .setTitle("Snapshots: " + name)
-                            .setMessage(message.toString().trim())
-                            .setPositiveButton("OK", null)
-                            .show();
+                        showSnapshotListDialog(name, snapshots);
 
                         setConnectionStatus("Loaded snapshots for " + name + ".");
                         return;
@@ -3294,6 +3290,102 @@ ensureDeviceId();
         }).start();
     }
 
+
+    private void showSnapshotListDialog(String instanceName, JSONArray snapshots) {
+        Dialog dialog = new Dialog(this);
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+
+        LinearLayout outer = new LinearLayout(this);
+        outer.setOrientation(LinearLayout.VERTICAL);
+        outer.setPadding(28, 24, 28, 24);
+        outer.setBackground(makeGlassBackground(0xEE10233F, 0xDD08111F, 0xFF38BDF8, 2, 24));
+
+        TextView title = new TextView(this);
+        title.setText("Snapshots: " + instanceName);
+        title.setTextSize(18);
+        title.setTypeface(Typeface.DEFAULT_BOLD);
+        title.setTextColor(0xFFFFFFFF);
+        title.setPadding(0, 0, 0, 18);
+        outer.addView(title);
+
+        ScrollView scroll = new ScrollView(this);
+        LinearLayout.LayoutParams scrollParams = new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            (int) (getResources().getDisplayMetrics().heightPixels * 0.35f)
+        );
+        scroll.setLayoutParams(scrollParams);
+
+        LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+
+        if (snapshots == null || snapshots.length() == 0) {
+            TextView empty = new TextView(this);
+            empty.setText("No snapshots found.");
+            empty.setTextSize(15);
+            empty.setTextColor(0xFFFFFFFF);
+            empty.setPadding(12, 8, 12, 8);
+            list.addView(empty);
+        } else {
+            for (int i = 0; i < snapshots.length(); i++) {
+                JSONObject snapshot = snapshots.optJSONObject(i);
+                if (snapshot == null) {
+                    continue;
+                }
+
+                String snapshotName = snapshot.optString("name", "").trim();
+                if (snapshotName.isEmpty()) {
+                    continue;
+                }
+
+                TextView item = new TextView(this);
+                item.setText(snapshotName);
+                item.setTextSize(16);
+                item.setTextColor(0xFFFFFFFF);
+                item.setPadding(18, 16, 18, 16);
+                item.setBackground(makeGlassBackground(0xCC1F2937, 0xAA111827, 0x5538BDF8, 1, 18));
+
+                LinearLayout.LayoutParams itemParams = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                );
+                itemParams.setMargins(0, 0, 0, 12);
+                item.setLayoutParams(itemParams);
+
+                list.addView(item);
+            }
+        }
+
+        scroll.addView(list);
+        outer.addView(scroll);
+
+        Button close = new Button(this);
+        close.setText("Close");
+        close.setAllCaps(false);
+        close.setTextSize(14);
+        close.setTextColor(0xFFFFFFFF);
+        close.setPadding(18, 12, 18, 12);
+        close.setBackground(makeGlassBackground(0xEE123254, 0xCC08111F, 0xFF38BDF8, 2, 24));
+
+        LinearLayout.LayoutParams closeParams = new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        closeParams.setMargins(0, 18, 0, 0);
+        close.setLayoutParams(closeParams);
+        close.setOnClickListener(v -> dialog.dismiss());
+
+        outer.addView(close);
+
+        dialog.setContentView(outer);
+
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawable(new ColorDrawable(0x00000000));
+            int width = (int) (getResources().getDisplayMetrics().widthPixels * 0.90f);
+            dialog.getWindow().setLayout(width, android.view.ViewGroup.LayoutParams.WRAP_CONTENT);
+        }
+
+        dialog.show();
+    }
 
     private void showOperationMessage(String message) {
         setConnectionStatus(message);
