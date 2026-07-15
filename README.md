@@ -6,15 +6,15 @@ The project is designed for homelab and small infrastructure environments where 
 
 ## Latest Release
 
-### Server v1.5.0
+### Server v1.6.0
 
-Server `v1.5.0` improves resilience when Incus remotes are offline or unhealthy and adds complete admin snapshot-management API support.
+Server `v1.6.0` adds instance IPv4 reporting and authoritative nested Docker detection for running containers, including Docker installation state, daemon status, and active versus configured container counts.
 
-### Android Client v0.6.0
+### Android Client v0.7.0
 
-Android `v0.6.0` adds full snapshot management for authorized Admin clients, including taking, restoring, renaming, and deleting snapshots.
+Android `v0.7.0` displays primary IPv4 addresses for running containers and virtual machines and adds detailed nested Docker status to instance detail cards.
 
-The Android client and server are versioned independently. Android `v0.6.0` is published as an asset on the server `v1.5.0` GitHub release.
+The Android client and server are versioned independently. Android `v0.7.0` is published as an asset on the server `v1.6.0` GitHub release.
 
 ## Screenshot
 

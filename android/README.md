@@ -6,11 +6,11 @@ The Android client connects to the ScottiBYTE Incus Mobile Server API. It does n
 
 ## Current Release
 
-### Android v0.6.0
+### Android v0.7.0
 
-Android `v0.6.0` adds complete snapshot management for Admin clients and improved handling of unavailable or unhealthy Incus remotes.
+Android `v0.7.0` displays primary IPv4 addresses for running containers and virtual machines and adds detailed nested Docker installation, daemon, and container-count status.
 
-This client is published as an APK asset on the ScottiBYTE Incus Mobile Server `v1.5.0` GitHub release.
+This client is published as an APK asset on the ScottiBYTE Incus Mobile Server `v1.6.0` GitHub release.
 
 ## Screenshots
 
@@ -240,7 +240,7 @@ Use the full Incus CLI or administrative workstation for:
 - Android device
 - Network access to ScottiBYTE Incus Mobile Server
 - A paired and authorized mobile client record
-- Server v1.5.0 for complete Android v0.6.0 snapshot management
+- Server v1.6.0 for complete Android v0.7.0 snapshot management
 - Mobile API access enabled on the server
 
 ## Versioning
@@ -250,14 +250,14 @@ The Android client and server are versioned independently.
 Current release versions:
 
 ```text
-Server: v1.5.0
-Android Client: v0.6.0
+Server: v1.6.0
+Android Client: v0.7.0
 API Compatibility: v1
 ```
 
 The Android version balloon checks the server's advertised Android version. When a newer client is available, the balloon becomes a clickable update link to the APK published on the corresponding GitHub release.
 
-Future Android releases may work with older server releases when the API remains compatible, but snapshot management in Android v0.6.0 requires the server-side snapshot API included with server v1.5.0.
+Future Android releases may work with older server releases when the API remains compatible, but snapshot management in Android v0.7.0 requires the server-side snapshot API included with server v1.6.0.
 
 ## Security Notes
 

@@ -60,7 +60,7 @@ public class MainActivity extends Activity {
     private static final String PREF_SERVER_URL = "server_url";
     private static final String PREF_CLIENT_ROLE = "client_role";
     private static final String DEFAULT_API_BASE_URL = "";
-    private static final String APP_VERSION = "0.6.0";
+    private static final String APP_VERSION = "0.7.0";
     private static final String PREFS_NAME = "scottibyte_incus_mobile";
     private static final String PREF_DEVICE_ID = "device_id";
     private static final String PREF_BEARER_TOKEN = "bearer_token";
@@ -1514,10 +1514,37 @@ ensureDeviceId();
 
                 JSONObject selectedAfterRefresh = findSelectedInstanceObject();
 
-                if (selectedInstanceKey != null && !selectedInstanceKey.trim().isEmpty() && selectedAfterRefresh != null) {
+                if (
+                    selectedInstanceKey != null &&
+                    !selectedInstanceKey.trim().isEmpty() &&
+                    selectedAfterRefresh != null
+                ) {
+                    /*
+                     * Inventory refresh does not contain authoritative nested
+                     * Docker details. Show the refreshed inventory fields,
+                     * then reload the selected instance's detail endpoint.
+                     */
+                    if (
+                        isContainer(selectedAfterRefresh) &&
+                        isRunning(selectedAfterRefresh)
+                    ) {
+                        try {
+                            selectedAfterRefresh.put(
+                                "nested_docker",
+                                "checking"
+                            );
+                        } catch (Exception ignored) {
+                        }
+                    }
+
+                    lastSelectedInstance = selectedAfterRefresh;
                     showInstanceDetailView();
                     setInstanceDetail(selectedAfterRefresh);
-                } else if (selectedInstanceKey != null && !selectedInstanceKey.trim().isEmpty()) {
+                    loadSelectedInstanceDetails(selectedAfterRefresh);
+                } else if (
+                    selectedInstanceKey != null &&
+                    !selectedInstanceKey.trim().isEmpty()
+                ) {
                     showInstanceDetailView();
 
                     if (selectedInstanceCardContainer != null) {
@@ -2525,6 +2552,16 @@ ensureDeviceId();
             String name = item.optString("name", item.optString("instance", item.optString("id", "")));
             String type = item.optString("type", "");
             String status = item.optString("status", "");
+            String displayIpv4 = "";
+
+            if (!item.isNull("primary_ipv4")) {
+                displayIpv4 =
+                    item.optString("primary_ipv4", "").trim();
+            }
+
+            if ("null".equalsIgnoreCase(displayIpv4)) {
+                displayIpv4 = "";
+            }
             String errorMessage = item.optString("message", "");
             String reason = item.optString("reason", "");
             String instanceKey = getInstanceKey(item);
@@ -2595,6 +2632,13 @@ ensureDeviceId();
                     .append(" / ")
                     .append(type.isEmpty() ? "unknown type" : type);
 
+                if (
+                    "Running".equalsIgnoreCase(status) &&
+                    !displayIpv4.isEmpty()
+                ) {
+                    metaText.append(" · ").append(displayIpv4);
+                }
+
                 if (!project.isEmpty()) {
                     metaText.append("\nProject: ").append(project);
                 }
@@ -2609,9 +2653,22 @@ ensureDeviceId();
             card.setFocusable(true);
             card.setOnClickListener(v -> {
                 selectedInstanceKey = getInstanceKey(item);
+
+                if (
+                    isContainer(item) &&
+                    isRunning(item) &&
+                    item.isNull("nested_docker")
+                ) {
+                    try {
+                        item.put("nested_docker", "checking");
+                    } catch (Exception ignored) {
+                    }
+                }
+
                 lastSelectedInstance = item;
                 setInstanceDetail(item);
                 showInstanceDetailView();
+                loadSelectedInstanceDetails(item);
             });
 
             card.addView(title);
@@ -2620,6 +2677,84 @@ ensureDeviceId();
             instanceCardsContainer.addView(card);
         }
     }
+
+    private void loadSelectedInstanceDetails(JSONObject item) {
+        if (item == null) {
+            return;
+        }
+
+        final String requestedKey = getInstanceKey(item);
+
+        if (requestedKey.trim().isEmpty()) {
+            return;
+        }
+
+        new Thread(() -> {
+            try {
+                String encodedId = URLEncoder.encode(requestedKey, "UTF-8");
+
+                HttpResult result = httpRequest(
+                    "GET",
+                    "/api/mobile/instances/" + encodedId,
+                    null,
+                    getBearerToken()
+                );
+
+                if (result.code < 200 || result.code >= 300) {
+                    runOnUiThread(() -> {
+                        if (!requestedKey.equals(selectedInstanceKey)) {
+                            return;
+                        }
+
+                        try {
+                            item.put("nested_docker", "unknown");
+                        } catch (Exception ignored) {
+                        }
+
+                        lastSelectedInstance = item;
+                        renderSelectedInstanceCard(item);
+                    });
+                    return;
+                }
+
+                JSONObject response = new JSONObject(result.body);
+                JSONObject detailedInstance =
+                    response.optJSONObject("instance");
+
+                if (detailedInstance == null) {
+                    return;
+                }
+
+                runOnUiThread(() -> {
+                    /*
+                     * Ignore a late response if the user selected another
+                     * instance while this request was running.
+                     */
+                    if (!requestedKey.equals(selectedInstanceKey)) {
+                        return;
+                    }
+
+                    lastSelectedInstance = detailedInstance;
+                    renderSelectedInstanceCard(detailedInstance);
+                });
+            } catch (Exception error) {
+                runOnUiThread(() -> {
+                    if (!requestedKey.equals(selectedInstanceKey)) {
+                        return;
+                    }
+
+                    try {
+                        item.put("nested_docker", "unknown");
+                    } catch (Exception ignored) {
+                    }
+
+                    lastSelectedInstance = item;
+                    renderSelectedInstanceCard(item);
+                });
+            }
+        }).start();
+    }
+
 
     private JSONObject findSelectedInstanceObject() {
         if (lastInstances == null || selectedInstanceKey == null || selectedInstanceKey.trim().isEmpty()) {
@@ -4497,6 +4632,31 @@ ensureDeviceId();
         String status = item.optString("status", "");
         String architecture = item.optString("architecture", "");
         String location = item.optString("location", "");
+        String displayIpv4 = "";
+
+        if (!item.isNull("primary_ipv4")) {
+            displayIpv4 =
+                item.optString("primary_ipv4", "").trim();
+        }
+
+        if ("null".equalsIgnoreCase(displayIpv4)) {
+            displayIpv4 = "";
+        }
+        String nestedDocker = "";
+
+        if (!item.isNull("nested_docker")) {
+            nestedDocker =
+                item.optString("nested_docker", "").trim();
+        }
+
+        if ("null".equalsIgnoreCase(nestedDocker)) {
+            nestedDocker = "";
+        }
+
+        int nestedDockerRunning =
+            item.optInt("nested_docker_running", -1);
+        int nestedDockerTotal =
+            item.optInt("nested_docker_total", -1);
         String createdAt = item.optString("created_at", "");
         String lastUsedAt = item.optString("last_used_at", "");
         String error = item.optString("error", "");
@@ -4535,6 +4695,62 @@ ensureDeviceId();
             appendDetailLine(out, "Project", project);
             appendDetailLine(out, "Type", type);
             appendDetailLine(out, "Status", status);
+
+            if (
+                "Running".equalsIgnoreCase(status) &&
+                !displayIpv4.isEmpty()
+            ) {
+                appendDetailLine(out, "IP Address", displayIpv4);
+            }
+
+            if (
+                "container".equalsIgnoreCase(type) &&
+                "Running".equalsIgnoreCase(status) &&
+                !nestedDocker.isEmpty()
+            ) {
+                String dockerLabel;
+
+                switch (nestedDocker.toLowerCase()) {
+                    case "checking":
+                        dockerLabel = "Checking…";
+                        break;
+
+                    case "running":
+                        if (nestedDockerTotal == 0) {
+                            dockerLabel =
+                                "Running — no containers configured";
+                        } else if (
+                            nestedDockerRunning >= 0 &&
+                            nestedDockerTotal >= 0
+                        ) {
+                            dockerLabel =
+                                "Running — " +
+                                nestedDockerRunning +
+                                " of " +
+                                nestedDockerTotal +
+                                " containers active";
+                        } else {
+                            dockerLabel = "Running";
+                        }
+                        break;
+
+                    case "stopped":
+                        dockerLabel =
+                            "Installed, daemon stopped";
+                        break;
+
+                    case "absent":
+                        dockerLabel = "Not installed";
+                        break;
+
+                    default:
+                        dockerLabel = "Unknown";
+                        break;
+                }
+
+                appendDetailLine(out, "Nested Docker", dockerLabel);
+            }
+
             appendDetailLine(out, "Architecture", architecture);
             appendDetailLine(out, "Location", location);
             appendDetailLine(out, "Created", formatTimestampLocal(createdAt));

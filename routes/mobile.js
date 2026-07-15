@@ -3,6 +3,8 @@ const { getMobileActionsStatus } = require('../operations');
 const {
   getAllInstances,
   getRemotes,
+  getInstanceById,
+  getNestedDockerStatus,
   runInstanceAction,
   listInstanceSnapshots,
   createInstanceSnapshot,
@@ -16,11 +18,11 @@ const router = express.Router();
 
 
 const ANDROID_VERSION_INFO = {
-  server_release: 'v1.5.0',
-  android_version: '0.6.0',
-  android_release: 'v1.5.0',
-  apk_url: 'https://github.com/ScottiBYTE/scottibyte-incus-mobile-server/releases/download/v1.5.0/ScottiBYTE-Incus-Mobile-Android-v0.6.0-debug.apk',
-  android_release_url: 'https://github.com/ScottiBYTE/scottibyte-incus-mobile-server/releases/tag/v1.5.0'
+  server_release: 'v1.6.0',
+  android_version: '0.7.0',
+  android_release: 'v1.6.0',
+  apk_url: 'https://github.com/ScottiBYTE/scottibyte-incus-mobile-server/releases/download/v1.6.0/ScottiBYTE-Incus-Mobile-Android-v0.7.0-debug.apk',
+  android_release_url: 'https://github.com/ScottiBYTE/scottibyte-incus-mobile-server/releases/tag/v1.6.0'
 };
 
 router.get('/android-version', async (req, res) => {
@@ -106,8 +108,7 @@ router.get('/summary', requireMobileAuth, async (req, res) => {
 router.get('/instances/:id', requireMobileAuth, async (req, res) => {
   try {
     const requestedId = decodeURIComponent(req.params.id);
-    const instances = await getAllInstances();
-    const instance = instances.find(i => i.id === requestedId);
+    const instance = await getInstanceById(requestedId);
 
     if (!instance) {
       return res.status(404).json({
@@ -117,13 +118,34 @@ router.get('/instances/:id', requireMobileAuth, async (req, res) => {
       });
     }
 
+    /*
+     * Nested Docker detection is intentionally detail-only. Running this
+     * probe during the full inventory refresh would execute a command inside
+     * every running container.
+     */
+    const nestedDocker = await getNestedDockerStatus(instance);
+
     res.json({
       ok: true,
       generated_at: new Date().toISOString(),
-      instance
+      instance: {
+        ...instance,
+        nested_docker: nestedDocker.status,
+        nested_docker_running: nestedDocker.running,
+        nested_docker_total: nestedDocker.total
+      }
     });
   } catch (err) {
-    res.status(500).json({ ok: false, error: err.message });
+    console.error(
+      '[mobile instance detail]',
+      req.params.id,
+      err && err.stack ? err.stack : err
+    );
+
+    res.status(500).json({
+      ok: false,
+      error: err.message
+    });
   }
 });
 

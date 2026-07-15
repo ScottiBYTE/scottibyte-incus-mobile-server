@@ -848,7 +848,20 @@ async function getInstancesForRemote(remote) {
 function normalizeInstance(remoteName, remoteProject, inst) {
   const project = inst.project || remoteProject || 'default';
   const network = inst.state?.network || {};
-  const primaryNic = network.eth0 || findBestNic(network);
+  const instanceType = inst.type || 'container';
+
+  /*
+   * Containers use only eth0 so Docker bridges, VPNs, and other nested
+   * interfaces are never mistaken for the container's LAN address.
+   *
+   * Virtual machines commonly use predictable interface names such as
+   * enp5s0, ens3, or eth0. For VMs, use the best guest-agent-reported
+   * non-loopback and non-Docker interface.
+   */
+  const primaryNic =
+    instanceType === 'virtual-machine'
+      ? findBestNic(network)
+      : (network.eth0 || null);
 
   const ipv4 = getIpv4Addresses(primaryNic);
   const ipv6 = getIpv6Addresses(primaryNic);
@@ -868,13 +881,17 @@ function normalizeInstance(remoteName, remoteProject, inst) {
     project,
     name: inst.name,
     dns_name: (inst.name || '').toLowerCase(),
-    type: inst.type || 'container',
+    type: instanceType,
     status: inst.status,
     status_code: inst.status_code,
     architecture: inst.architecture || null,
     profiles: inst.profiles || [],
     ipv4,
     ipv6,
+    eth0_ipv4:
+      instanceType === 'container'
+        ? (ipv4[0] || null)
+        : null,
     primary_ipv4: ipv4[0] || null,
     mac,
     cpu: {
@@ -1087,6 +1104,141 @@ function formatUsedTotal(used, total) {
   if (usedText && totalText && total > 0) return `${usedText} / ${totalText}`;
   if (usedText) return usedText;
   return null;
+}
+
+async function getInstanceById(id) {
+  const parsed = parseInstanceId(id);
+
+  const stdout = await runIncus([
+    'list',
+    `${parsed.remote}:`,
+    parsed.name,
+    '--project',
+    parsed.project || 'default',
+    '--format',
+    'json'
+  ]);
+
+  const rows = JSON.parse(stdout);
+
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return null;
+  }
+
+  /*
+   * Incus list filters may match more than one similarly named instance.
+   * Return only the exact requested name.
+   */
+  const exact = rows.find(
+    row => String(row.name || '') === parsed.name
+  );
+
+  if (!exact) {
+    return null;
+  }
+
+  return normalizeInstance(
+    parsed.remote,
+    parsed.project || 'default',
+    exact
+  );
+}
+
+
+const nestedDockerCache = new Map();
+const NESTED_DOCKER_CACHE_MS = 5 * 60 * 1000;
+
+async function getNestedDockerStatus(instance) {
+  if (
+    !instance ||
+    instance.error ||
+    instance.type !== 'container' ||
+    instance.status !== 'Running'
+  ) {
+    return {
+      status: null,
+      running: null,
+      total: null
+    };
+  }
+
+  const cacheKey = instance.id;
+  const cached = nestedDockerCache.get(cacheKey);
+
+  if (
+    cached &&
+    Date.now() - cached.checkedAt < NESTED_DOCKER_CACHE_MS
+  ) {
+    return cached.details;
+  }
+
+  let details = {
+    status: 'unknown',
+    running: null,
+    total: null
+  };
+
+  try {
+    const stdout = await runIncus([
+      'exec',
+      `${instance.remote}:${instance.name}`,
+      '--project',
+      instance.project || 'default',
+      '--',
+      'sh',
+      '-lc',
+      [
+        'if ! command -v docker >/dev/null 2>&1; then',
+        '  printf "absent|0|0";',
+        'elif ! docker info >/dev/null 2>&1; then',
+        '  printf "stopped|0|0";',
+        'else',
+        '  running="$(docker ps -q 2>/dev/null | wc -l | tr -d \" \")";',
+        '  total="$(docker ps -aq 2>/dev/null | wc -l | tr -d \" \")";',
+        '  printf "running|%s|%s" "$running" "$total";',
+        'fi'
+      ].join(' ')
+    ], 10000);
+
+    const parts = String(stdout || '').trim().split('|');
+    const status = String(parts[0] || '').trim().toLowerCase();
+
+    if (status === 'absent') {
+      details = {
+        status: 'absent',
+        running: 0,
+        total: 0
+      };
+    } else if (status === 'stopped') {
+      details = {
+        status: 'stopped',
+        running: 0,
+        total: 0
+      };
+    } else if (status === 'running') {
+      const running = Number.parseInt(parts[1], 10);
+      const total = Number.parseInt(parts[2], 10);
+
+      details = {
+        status: 'running',
+        running: Number.isFinite(running) ? running : 0,
+        total: Number.isFinite(total) ? total : 0
+      };
+    }
+  } catch (err) {
+    details = {
+      status: 'unknown',
+      running: null,
+      total: null
+    };
+  }
+
+  nestedDockerCache.set(cacheKey, {
+    details,
+    checkedAt: Date.now()
+  });
+
+  return details;
 }
 
 async function getAllInstances() {
@@ -1360,6 +1512,8 @@ module.exports = {
   listInstanceSnapshots,
   getRemotes,
   getAllInstances,
+  getInstanceById,
+  getNestedDockerStatus,
   runInstanceAction,
   parseInstanceId,
   getRemoteInventory,
