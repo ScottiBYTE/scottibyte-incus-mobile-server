@@ -1,5 +1,3 @@
-# ScottiBYTE Incus Mobile Server v1.5.0
-
 Server `v1.5.0` and Android client `v0.6.0` add resilient multi-server inventory and complete mobile snapshot management.
 
 ## Server v1.5.0
