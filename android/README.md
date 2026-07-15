@@ -4,6 +4,14 @@
 
 The Android client connects to the ScottiBYTE Incus Mobile Server API. It does not connect directly to Incus servers and does not require Incus credentials on the phone.
 
+## Current Release
+
+### Android v0.6.0
+
+Android `v0.6.0` adds complete snapshot management for Admin clients and improved handling of unavailable or unhealthy Incus remotes.
+
+This client is published as an APK asset on the ScottiBYTE Incus Mobile Server `v1.5.0` GitHub release.
+
 ## Screenshots
 
 ### Server List
@@ -26,17 +34,25 @@ The Android client connects to the ScottiBYTE Incus Mobile Server API. It does n
 
 - Pair with ScottiBYTE Incus Mobile Server
 - View configured Incus servers
-- View server reachability
+- Distinguish Online, Offline, No Quorum, and Inventory Error states
+- Continue showing partial inventory when some remotes are unavailable
 - Browse instances by server
 - Search instance inventory
 - View instance details
 - Role-aware mobile actions
 - Start, stop, and restart instances
 - Admin-only shell access
+- Admin-only snapshot management
+- Take snapshots
+- Restore the newest snapshot
+- Rename and delete snapshots
+- Newest-first snapshot ordering
+- Dark-themed snapshot dialogs and confirmations
+- Visible snapshot-list scroll indicator
 - Global action hiding when mobile actions are disabled on the server
 - Read-only mode for Viewer role
 - Operator mode for power control
-- Admin mode for shell access
+- Admin mode for shell and snapshot access
 
 ## How It Works
 
@@ -64,7 +80,7 @@ The actions visible in the Android app depend on the role assigned to the mobile
 |---|---|
 | Viewer | View servers, instances, status, and inventory |
 | Operator | Viewer access plus start, stop, and restart |
-| Admin | Operator access plus shell access |
+| Admin | Operator access plus shell and snapshot management |
 
 If the global mobile action switch is disabled on the server, all action buttons are hidden and the app remains read-only.
 
@@ -141,6 +157,35 @@ For authorized roles, action buttons may include:
 - Start
 - Restart
 - Shell
+- Take Snapshot
+- Manage Snapshots
+
+## Snapshot Management
+
+Admin clients can manage snapshots for eligible instances.
+
+The instance details screen provides:
+
+- **Take Snapshot** to create a new snapshot
+- **Manage Snapshots** to restore, rename, or delete existing snapshots
+
+Snapshots are listed newest first. Restore is offered only for the newest snapshot because Incus storage backends such as ZFS may require newer snapshots to be deleted before an older snapshot can be restored.
+
+The snapshot-management dialog includes:
+
+- Restore on the newest snapshot
+- Rename on every snapshot
+- Delete on every snapshot
+- Dark-themed confirmation and rename dialogs
+- A visible scroll indicator when additional snapshots are available
+
+Snapshot operations are unavailable when:
+
+- The client is not assigned the Admin role
+- Global mobile actions are disabled
+- The instance is protected
+- The Incus remote is unavailable
+- The Incus cluster does not have quorum
 
 ## Mobile Shell
 
@@ -173,9 +218,11 @@ The app depends on server-side policy for:
 
 Use the Android client for:
 
-- Checking server health
+- Checking server health and remote availability
 - Checking instance status
 - Quickly starting, stopping, or restarting an instance
+- Taking and managing snapshots
+- Restoring the newest snapshot
 - Opening an emergency admin shell
 - Verifying mobile operational state
 
@@ -186,29 +233,31 @@ Use the full Incus CLI or administrative workstation for:
 - Network configuration
 - Image management
 - Complex migrations
-- Snapshot restore workflows
+- Restoring older snapshots when newer snapshots must also be removed
 
 ## Requirements
 
 - Android device
 - Network access to ScottiBYTE Incus Mobile Server
 - A paired and authorized mobile client record
-- Server v1.0.0 or compatible
+- Server v1.5.0 for complete Android v0.6.0 snapshot management
 - Mobile API access enabled on the server
 
 ## Versioning
 
-The Android client and server are versioned independently after the first public release.
+The Android client and server are versioned independently.
 
-Recommended public launch versions:
+Current release versions:
 
 ```text
-Server: v1.0.0
-Android Client: v1.0.0
+Server: v1.5.0
+Android Client: v0.6.0
 API Compatibility: v1
 ```
 
-Future Android releases may work with older server releases when the API remains compatible.
+The Android version balloon checks the server's advertised Android version. When a newer client is available, the balloon becomes a clickable update link to the APK published on the corresponding GitHub release.
+
+Future Android releases may work with older server releases when the API remains compatible, but snapshot management in Android v0.6.0 requires the server-side snapshot API included with server v1.5.0.
 
 ## Security Notes
 

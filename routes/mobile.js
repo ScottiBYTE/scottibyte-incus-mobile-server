@@ -1,17 +1,26 @@
 const express = require('express');
 const { getMobileActionsStatus } = require('../operations');
-const { getAllInstances, getRemotes, runInstanceAction, listInstanceSnapshots, createInstanceSnapshot } = require('../incus');
+const {
+  getAllInstances,
+  getRemotes,
+  runInstanceAction,
+  listInstanceSnapshots,
+  createInstanceSnapshot,
+  restoreInstanceSnapshot,
+  renameInstanceSnapshot,
+  deleteInstanceSnapshot
+} = require('../incus');
 const { requireMobileAuth } = require('../auth');
 
 const router = express.Router();
 
 
 const ANDROID_VERSION_INFO = {
-  server_release: 'v1.4.0',
-  android_version: '0.5.0',
-  android_release: 'v1.4.0',
-  apk_url: 'https://github.com/ScottiBYTE/scottibyte-incus-mobile-server/releases/download/v1.4.0/ScottiBYTE-Incus-Mobile-Android-v0.5.0-debug.apk',
-  android_release_url: 'https://github.com/ScottiBYTE/scottibyte-incus-mobile-server/releases/tag/v1.4.0'
+  server_release: 'v1.5.0',
+  android_version: '0.6.0',
+  android_release: 'v1.5.0',
+  apk_url: 'https://github.com/ScottiBYTE/scottibyte-incus-mobile-server/releases/download/v1.5.0/ScottiBYTE-Incus-Mobile-Android-v0.6.0-debug.apk',
+  android_release_url: 'https://github.com/ScottiBYTE/scottibyte-incus-mobile-server/releases/tag/v1.5.0'
 };
 
 router.get('/android-version', async (req, res) => {
@@ -257,6 +266,176 @@ router.post('/instances/:id/snapshots', requireMobileAuth, async (req, res) => {
   }
 });
 
+
+router.post(
+  '/instances/:id/snapshots/:snapshot/restore',
+  requireMobileAuth,
+  async (req, res) => {
+    try {
+      if (!requireSnapshotAdmin(req, res)) return;
+
+      if (!getMobileActionsStatus().effective_enabled) {
+        return res.status(403).json({
+          ok: false,
+          error: 'Mobile actions disabled'
+        });
+      }
+
+      const requestedId = decodeURIComponent(req.params.id);
+      const snapshotName = String(req.params.snapshot || '').trim();
+      const instance = await findInstanceById(requestedId);
+
+      if (!instance) {
+        return res.status(404).json({
+          ok: false,
+          error: 'Instance not found',
+          id: requestedId
+        });
+      }
+
+      if (isProtectedInstance(instance)) {
+        return res.status(403).json({
+          ok: false,
+          error: 'Protected instance',
+          id: requestedId
+        });
+      }
+
+      const result = await restoreInstanceSnapshot(
+        requestedId,
+        snapshotName
+      );
+
+      res.json({
+        ok: true,
+        id: requestedId,
+        snapshot: result.snapshot,
+        restored: true,
+        message: `Snapshot restored: ${result.snapshot}`
+      });
+    } catch (err) {
+      res.status(500).json({
+        ok: false,
+        error: err.message
+      });
+    }
+  }
+);
+
+
+router.post(
+  '/instances/:id/snapshots/:snapshot/rename',
+  requireMobileAuth,
+  async (req, res) => {
+    try {
+      if (!requireSnapshotAdmin(req, res)) return;
+
+      if (!getMobileActionsStatus().effective_enabled) {
+        return res.status(403).json({
+          ok: false,
+          error: 'Mobile actions disabled'
+        });
+      }
+
+      const requestedId = decodeURIComponent(req.params.id);
+      const oldSnapshotName = String(req.params.snapshot || '').trim();
+      const newSnapshotName = String(req.body?.name || '').trim();
+      const instance = await findInstanceById(requestedId);
+
+      if (!instance) {
+        return res.status(404).json({
+          ok: false,
+          error: 'Instance not found',
+          id: requestedId
+        });
+      }
+
+      if (isProtectedInstance(instance)) {
+        return res.status(403).json({
+          ok: false,
+          error: 'Protected instance',
+          id: requestedId
+        });
+      }
+
+      const result = await renameInstanceSnapshot(
+        requestedId,
+        oldSnapshotName,
+        newSnapshotName
+      );
+
+      res.json({
+        ok: true,
+        id: requestedId,
+        old_snapshot: result.old_snapshot,
+        snapshot: result.snapshot,
+        renamed: true,
+        message: `Snapshot renamed: ${result.old_snapshot} → ${result.snapshot}`
+      });
+    } catch (err) {
+      res.status(500).json({
+        ok: false,
+        error: err.message
+      });
+    }
+  }
+);
+
+
+router.post(
+  '/instances/:id/snapshots/:snapshot/delete',
+  requireMobileAuth,
+  async (req, res) => {
+    try {
+      if (!requireSnapshotAdmin(req, res)) return;
+
+      if (!getMobileActionsStatus().effective_enabled) {
+        return res.status(403).json({
+          ok: false,
+          error: 'Mobile actions disabled'
+        });
+      }
+
+      const requestedId = decodeURIComponent(req.params.id);
+      const snapshotName = String(req.params.snapshot || '').trim();
+      const instance = await findInstanceById(requestedId);
+
+      if (!instance) {
+        return res.status(404).json({
+          ok: false,
+          error: 'Instance not found',
+          id: requestedId
+        });
+      }
+
+      if (isProtectedInstance(instance)) {
+        return res.status(403).json({
+          ok: false,
+          error: 'Protected instance',
+          id: requestedId
+        });
+      }
+
+      const result = await deleteInstanceSnapshot(
+        requestedId,
+        snapshotName
+      );
+
+      res.json({
+        ok: true,
+        id: requestedId,
+        snapshot: result.snapshot,
+        deleted: true,
+        message: `Snapshot deleted: ${result.snapshot}`
+      });
+    } catch (err) {
+      res.status(500).json({
+        ok: false,
+        error: err.message
+      });
+    }
+  }
+);
 
 router.post('/instances/:id/actions/:action', requireMobileAuth, async (req, res) => {
   try {

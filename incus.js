@@ -1260,8 +1260,102 @@ async function createInstanceSnapshot(id, requestedName) {
 }
 
 
+function validateExistingSnapshotName(name) {
+  const value = String(name || '').trim();
+
+  if (!value) {
+    throw new Error('Snapshot name is required');
+  }
+
+  if (!/^[A-Za-z0-9._-]+$/.test(value)) {
+    throw new Error(
+      'Invalid snapshot name. Use letters, numbers, dots, underscores, and hyphens only.'
+    );
+  }
+
+  return value;
+}
+
+
+async function restoreInstanceSnapshot(id, requestedName) {
+  const { remote, project, name } = parseInstanceId(id);
+  const snapshotName = validateExistingSnapshotName(requestedName);
+
+  await runIncus([
+    'snapshot',
+    'restore',
+    `${remote}:${name}`,
+    snapshotName,
+    '--project',
+    project
+  ], 120000);
+
+  return {
+    ok: true,
+    id,
+    snapshot: snapshotName,
+    restored: true
+  };
+}
+
+
+async function renameInstanceSnapshot(id, oldRequestedName, newRequestedName) {
+  const { remote, project, name } = parseInstanceId(id);
+  const oldSnapshotName = validateExistingSnapshotName(oldRequestedName);
+  const newSnapshotName = validateExistingSnapshotName(newRequestedName);
+
+  if (oldSnapshotName === newSnapshotName) {
+    throw new Error('The new snapshot name must be different from the current name');
+  }
+
+  await runIncus([
+    'snapshot',
+    'rename',
+    `${remote}:${name}`,
+    oldSnapshotName,
+    newSnapshotName,
+    '--project',
+    project
+  ], 60000);
+
+  return {
+    ok: true,
+    id,
+    old_snapshot: oldSnapshotName,
+    snapshot: newSnapshotName,
+    renamed: true
+  };
+}
+
+
+async function deleteInstanceSnapshot(id, requestedName) {
+  const { remote, project, name } = parseInstanceId(id);
+  const snapshotName = validateExistingSnapshotName(requestedName);
+
+  await runIncus([
+    'snapshot',
+    'delete',
+    `${remote}:${name}`,
+    snapshotName,
+    '--project',
+    project
+  ], 60000);
+
+  return {
+    ok: true,
+    id,
+    snapshot: snapshotName,
+    deleted: true
+  };
+}
+
+
 module.exports = {
   validateSnapshotName,
+  validateExistingSnapshotName,
+  restoreInstanceSnapshot,
+  renameInstanceSnapshot,
+  deleteInstanceSnapshot,
   createInstanceSnapshot,
   listInstanceSnapshots,
   getRemotes,

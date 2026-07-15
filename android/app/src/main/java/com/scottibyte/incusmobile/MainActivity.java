@@ -60,7 +60,7 @@ public class MainActivity extends Activity {
     private static final String PREF_SERVER_URL = "server_url";
     private static final String PREF_CLIENT_ROLE = "client_role";
     private static final String DEFAULT_API_BASE_URL = "";
-    private static final String APP_VERSION = "0.5.0";
+    private static final String APP_VERSION = "0.6.0";
     private static final String PREFS_NAME = "scottibyte_incus_mobile";
     private static final String PREF_DEVICE_ID = "device_id";
     private static final String PREF_BEARER_TOKEN = "bearer_token";
@@ -3184,8 +3184,8 @@ ensureDeviceId();
         if (showSnapshots) {
             LinearLayout snapshotRow = new LinearLayout(this);
             snapshotRow.setOrientation(LinearLayout.HORIZONTAL);
-            snapshotRow.addView(makeInstanceActionButton("Create Snapshot", v -> createInstanceSnapshot(item)));
-            snapshotRow.addView(makeInstanceActionButton("View Snapshots", v -> showInstanceSnapshots(item)));
+            snapshotRow.addView(makeInstanceActionButton("Take Snapshot", v -> createInstanceSnapshot(item)));
+            snapshotRow.addView(makeInstanceActionButton("Manage Snapshots", v -> showInstanceSnapshots(item)));
             card.addView(snapshotRow);
         }
     }
@@ -3199,6 +3199,51 @@ ensureDeviceId();
         }
 
         return "/api/mobile/instances/" + URLEncoder.encode(targetId, "UTF-8") + "/snapshots";
+    }
+
+
+    private String snapshotActionPathForInstance(
+        JSONObject item,
+        String snapshotName,
+        String action
+    ) throws Exception {
+        String cleanSnapshotName = snapshotName == null
+            ? ""
+            : snapshotName.trim();
+
+        String cleanAction = action == null
+            ? ""
+            : action.trim();
+
+        if (cleanSnapshotName.isEmpty()) {
+            throw new IllegalArgumentException("Snapshot name is required.");
+        }
+
+        if (
+            !"restore".equals(cleanAction) &&
+            !"rename".equals(cleanAction) &&
+            !"delete".equals(cleanAction)
+        ) {
+            throw new IllegalArgumentException("Unsupported snapshot action.");
+        }
+
+        return snapshotPathForInstance(item) +
+            "/" +
+            URLEncoder.encode(cleanSnapshotName, "UTF-8") +
+            "/" +
+            cleanAction;
+    }
+
+
+    private String snapshotRestorePathForInstance(
+        JSONObject item,
+        String snapshotName
+    ) throws Exception {
+        return snapshotActionPathForInstance(
+            item,
+            snapshotName,
+            "restore"
+        );
     }
 
     private void createInstanceSnapshot(JSONObject item) {
@@ -3269,7 +3314,7 @@ ensureDeviceId();
         }
 
         String name = item == null ? "instance" : item.optString("name", "instance");
-        showOperationMessage("Loading snapshots for " + name + "...");
+        showOperationMessage("Loading snapshot management for " + name + "...");
 
         new Thread(() -> {
             try {
@@ -3313,7 +3358,7 @@ ensureDeviceId();
                             }
                         }
 
-                        showSnapshotListDialog(name, snapshots);
+                        showSnapshotListDialog(name, item, snapshots);
 
                         setConnectionStatus("Loaded snapshots for " + name + ".");
                         return;
@@ -3333,7 +3378,603 @@ ensureDeviceId();
     }
 
 
-    private void showSnapshotListDialog(String instanceName, JSONArray snapshots) {
+    private void confirmRestoreInstanceSnapshot(
+        Dialog snapshotDialog,
+        JSONObject instanceItem,
+        String instanceName,
+        String snapshotName
+    ) {
+        if (!isAdminRole()) {
+            showOperationMessage(
+                "Admin role required for snapshot management."
+            );
+            return;
+        }
+
+        new android.app.AlertDialog.Builder(this)
+            .setTitle("Restore snapshot?")
+            .setMessage(
+                "Restore " +
+                instanceName +
+                " to snapshot \"" +
+                snapshotName +
+                "\"?\n\n" +
+                "The instance's current state will be replaced by the " +
+                "selected snapshot. This operation cannot be undone unless " +
+                "another snapshot exists."
+            )
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Restore", (dialog, which) -> {
+                if (snapshotDialog != null) {
+                    snapshotDialog.dismiss();
+                }
+
+                restoreInstanceSnapshot(instanceItem, snapshotName);
+            })
+            .show();
+    }
+
+
+    private void restoreInstanceSnapshot(
+        JSONObject item,
+        String snapshotName
+    ) {
+        if (!isAdminRole()) {
+            showOperationMessage(
+                "Admin role required for snapshot management."
+            );
+            return;
+        }
+
+        String token = getBearerToken();
+
+        if (token == null || token.trim().isEmpty()) {
+            showOperationMessage("Not paired. Pair this device first.");
+            return;
+        }
+
+        String instanceName = item == null
+            ? "instance"
+            : item.optString("name", "instance");
+
+        showOperationMessage(
+            "Restoring " +
+            instanceName +
+            " to snapshot " +
+            snapshotName +
+            "..."
+        );
+
+        new Thread(() -> {
+            try {
+                HttpResult result = httpRequest(
+                    "POST",
+                    snapshotRestorePathForInstance(item, snapshotName),
+                    "{}",
+                    token
+                );
+
+                JSONObject json = null;
+
+                try {
+                    json = new JSONObject(result.body);
+                } catch (Exception ignored) {
+                }
+
+                final JSONObject finalJson = json;
+
+                runOnUiThread(() -> {
+                    if (
+                        result.code >= 200 &&
+                        result.code < 300 &&
+                        finalJson != null &&
+                        finalJson.optBoolean("ok")
+                    ) {
+                        String restoredSnapshot =
+                            finalJson.optString("snapshot", snapshotName);
+
+                        showOperationMessage(
+                            "Snapshot restored: " + restoredSnapshot
+                        );
+
+                        setConnectionStatus(
+                            "Restored " +
+                            instanceName +
+                            " to " +
+                            restoredSnapshot +
+                            "."
+                        );
+
+                        loadInstances();
+                        return;
+                    }
+
+                    String error = finalJson == null
+                        ? ""
+                        : finalJson.optString("error", "");
+
+                    if (error.trim().isEmpty()) {
+                        error = result.toDisplayString();
+                    }
+
+                    showOperationMessage(error);
+                });
+            } catch (Exception e) {
+                runOnUiThread(
+                    () -> showOperationMessage(errorText(e))
+                );
+            }
+        }).start();
+    }
+
+
+    private Button makeSnapshotManagementButton(
+        String label,
+        boolean destructive
+    ) {
+        Button button = new Button(this);
+        button.setText(label);
+        button.setAllCaps(false);
+        button.setTextSize(12);
+        button.setTextColor(0xFFFFFFFF);
+        button.setPadding(12, 6, 12, 6);
+
+        if (destructive) {
+            button.setBackground(
+                makeGlassBackground(
+                    0xCC7F1D1D,
+                    0xAA450A0A,
+                    0xFFF87171,
+                    2,
+                    16
+                )
+            );
+        } else {
+            button.setBackground(
+                makeGlassBackground(
+                    0xCC123254,
+                    0xAA08111F,
+                    0xFF38BDF8,
+                    2,
+                    16
+                )
+            );
+        }
+
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+            0,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            1.0f
+        );
+        params.setMargins(4, 8, 4, 0);
+        button.setLayoutParams(params);
+
+        return button;
+    }
+
+
+    private void showDarkSnapshotConfirmation(
+        Dialog parentDialog,
+        JSONObject instanceItem,
+        String instanceName,
+        String snapshotName,
+        String dialogTitle,
+        String dialogMessage,
+        Runnable confirmedAction
+    ) {
+        Dialog dialog = new Dialog(this);
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+
+        LinearLayout outer = new LinearLayout(this);
+        outer.setOrientation(LinearLayout.VERTICAL);
+        outer.setPadding(28, 24, 28, 24);
+        outer.setBackground(
+            makeGlassBackground(
+                0xF010233F,
+                0xEE08111F,
+                0xFFF87171,
+                2,
+                24
+            )
+        );
+
+        TextView title = new TextView(this);
+        title.setText(dialogTitle);
+        title.setTextSize(19);
+        title.setTypeface(Typeface.DEFAULT_BOLD);
+        title.setTextColor(0xFFFFFFFF);
+        title.setPadding(0, 0, 0, 14);
+        outer.addView(title);
+
+        TextView message = new TextView(this);
+        message.setText(dialogMessage);
+        message.setTextSize(15);
+        message.setTextColor(0xFFD1D5DB);
+        message.setPadding(0, 0, 0, 20);
+        outer.addView(message);
+
+        LinearLayout buttons = new LinearLayout(this);
+        buttons.setOrientation(LinearLayout.HORIZONTAL);
+
+        Button cancel = makeSnapshotManagementButton("Cancel", false);
+        Button confirm = makeSnapshotManagementButton(
+            dialogTitle.startsWith("Delete") ? "Delete" : "Restore",
+            true
+        );
+
+        cancel.setOnClickListener(v -> dialog.dismiss());
+
+        confirm.setOnClickListener(v -> {
+            dialog.dismiss();
+
+            if (parentDialog != null) {
+                parentDialog.dismiss();
+            }
+
+            confirmedAction.run();
+        });
+
+        buttons.addView(cancel);
+        buttons.addView(confirm);
+        outer.addView(buttons);
+
+        dialog.setContentView(outer);
+
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawable(
+                new ColorDrawable(0x00000000)
+            );
+
+            int width = (int) (
+                getResources().getDisplayMetrics().widthPixels * 0.90f
+            );
+
+            dialog.getWindow().setLayout(
+                width,
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+            );
+        }
+
+        dialog.show();
+    }
+
+
+    private void showDarkRenameSnapshotDialog(
+        Dialog parentDialog,
+        JSONObject instanceItem,
+        String instanceName,
+        String oldSnapshotName
+    ) {
+        Dialog dialog = new Dialog(this);
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+
+        LinearLayout outer = new LinearLayout(this);
+        outer.setOrientation(LinearLayout.VERTICAL);
+        outer.setPadding(28, 24, 28, 24);
+        outer.setBackground(
+            makeGlassBackground(
+                0xF010233F,
+                0xEE08111F,
+                0xFF38BDF8,
+                2,
+                24
+            )
+        );
+
+        TextView title = new TextView(this);
+        title.setText("Rename Snapshot");
+        title.setTextSize(19);
+        title.setTypeface(Typeface.DEFAULT_BOLD);
+        title.setTextColor(0xFFFFFFFF);
+        title.setPadding(0, 0, 0, 10);
+        outer.addView(title);
+
+        TextView subtitle = new TextView(this);
+        subtitle.setText(
+            instanceName + "\nCurrent name: " + oldSnapshotName
+        );
+        subtitle.setTextSize(14);
+        subtitle.setTextColor(0xFFCBD5E1);
+        subtitle.setPadding(0, 0, 0, 14);
+        outer.addView(subtitle);
+
+        android.widget.EditText input =
+            new android.widget.EditText(this);
+
+        input.setText(oldSnapshotName);
+        input.setTextColor(0xFFFFFFFF);
+        input.setHintTextColor(0xFF94A3B8);
+        input.setSingleLine(true);
+        input.setSelection(input.getText().length());
+        input.setPadding(16, 12, 16, 12);
+        input.setBackground(
+            makeGlassBackground(
+                0xCC111827,
+                0xAA08111F,
+                0xFF38BDF8,
+                2,
+                16
+            )
+        );
+
+        outer.addView(input);
+
+        TextView rule = new TextView(this);
+        rule.setText(
+            "Allowed: letters, numbers, dots, underscores, and hyphens."
+        );
+        rule.setTextSize(12);
+        rule.setTextColor(0xFF94A3B8);
+        rule.setPadding(0, 10, 0, 14);
+        outer.addView(rule);
+
+        LinearLayout buttons = new LinearLayout(this);
+        buttons.setOrientation(LinearLayout.HORIZONTAL);
+
+        Button cancel = makeSnapshotManagementButton("Cancel", false);
+        Button rename = makeSnapshotManagementButton("Rename", false);
+
+        cancel.setOnClickListener(v -> dialog.dismiss());
+
+        rename.setOnClickListener(v -> {
+            String newName = input.getText().toString().trim();
+
+            if (newName.isEmpty()) {
+                input.setError("Snapshot name is required");
+                return;
+            }
+
+            if (!newName.matches("^[A-Za-z0-9._-]+$")) {
+                input.setError("Invalid snapshot name");
+                return;
+            }
+
+            if (newName.equals(oldSnapshotName)) {
+                input.setError("Enter a different name");
+                return;
+            }
+
+            dialog.dismiss();
+
+            if (parentDialog != null) {
+                parentDialog.dismiss();
+            }
+
+            renameInstanceSnapshot(
+                instanceItem,
+                oldSnapshotName,
+                newName
+            );
+        });
+
+        buttons.addView(cancel);
+        buttons.addView(rename);
+        outer.addView(buttons);
+
+        dialog.setContentView(outer);
+
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawable(
+                new ColorDrawable(0x00000000)
+            );
+
+            int width = (int) (
+                getResources().getDisplayMetrics().widthPixels * 0.90f
+            );
+
+            dialog.getWindow().setLayout(
+                width,
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+            );
+        }
+
+        dialog.show();
+    }
+
+
+    private void renameInstanceSnapshot(
+        JSONObject item,
+        String oldSnapshotName,
+        String newSnapshotName
+    ) {
+        runSnapshotManagementRequest(
+            item,
+            oldSnapshotName,
+            "rename",
+            "{\"name\":" + JSONObject.quote(newSnapshotName) + "}",
+            "Renaming snapshot " + oldSnapshotName + "...",
+            "Snapshot renamed: " + oldSnapshotName + " → " + newSnapshotName
+        );
+    }
+
+
+    private void deleteInstanceSnapshot(
+        JSONObject item,
+        String snapshotName
+    ) {
+        runSnapshotManagementRequest(
+            item,
+            snapshotName,
+            "delete",
+            "{}",
+            "Deleting snapshot " + snapshotName + "...",
+            "Snapshot deleted: " + snapshotName
+        );
+    }
+
+
+    private void runSnapshotManagementRequest(
+        JSONObject item,
+        String snapshotName,
+        String action,
+        String requestBody,
+        String progressMessage,
+        String successMessage
+    ) {
+        if (!isAdminRole()) {
+            showOperationMessage(
+                "Admin role required for snapshot management."
+            );
+            return;
+        }
+
+        String token = getBearerToken();
+
+        if (token == null || token.trim().isEmpty()) {
+            showOperationMessage("Not paired. Pair this device first.");
+            return;
+        }
+
+        showOperationMessage(progressMessage);
+
+        new Thread(() -> {
+            try {
+                HttpResult result = httpRequest(
+                    "POST",
+                    snapshotActionPathForInstance(
+                        item,
+                        snapshotName,
+                        action
+                    ),
+                    requestBody,
+                    token
+                );
+
+                JSONObject json = null;
+
+                try {
+                    json = new JSONObject(result.body);
+                } catch (Exception ignored) {
+                }
+
+                final JSONObject finalJson = json;
+
+                runOnUiThread(() -> {
+                    if (
+                        result.code >= 200 &&
+                        result.code < 300 &&
+                        finalJson != null &&
+                        finalJson.optBoolean("ok")
+                    ) {
+                        showOperationMessage(successMessage);
+                        setConnectionStatus(successMessage);
+                        loadInstances();
+                        showInstanceSnapshots(item);
+                        return;
+                    }
+
+                    String error = finalJson == null
+                        ? ""
+                        : finalJson.optString("error", "");
+
+                    if (error.trim().isEmpty()) {
+                        error = result.toDisplayString();
+                    }
+
+                    showOperationMessage(error);
+                });
+            } catch (Exception e) {
+                runOnUiThread(
+                    () -> showOperationMessage(errorText(e))
+                );
+            }
+        }).start();
+    }
+
+
+    private long snapshotCreationTimeMillis(JSONObject snapshot) {
+        if (snapshot == null) {
+            return 0L;
+        }
+
+        String[] fields = {
+            "created_at",
+            "taken_at",
+            "creation_date",
+            "created"
+        };
+
+        for (String field : fields) {
+            String value = snapshot.optString(field, "").trim();
+
+            if (value.isEmpty()) {
+                continue;
+            }
+
+            try {
+                return java.time.OffsetDateTime
+                    .parse(value)
+                    .toInstant()
+                    .toEpochMilli();
+            } catch (Exception ignored) {
+            }
+
+            try {
+                return java.time.Instant
+                    .parse(value)
+                    .toEpochMilli();
+            } catch (Exception ignored) {
+            }
+        }
+
+        return 0L;
+    }
+
+
+    private void updateSnapshotScrollThumb(
+        ScrollView scroll,
+        android.widget.FrameLayout indicator,
+        android.view.View thumb
+    ) {
+        if (
+            scroll == null ||
+            indicator == null ||
+            thumb == null ||
+            scroll.getChildCount() == 0
+        ) {
+            return;
+        }
+
+        android.view.View child = scroll.getChildAt(0);
+
+        int viewportHeight = scroll.getHeight();
+        int contentHeight = child.getHeight();
+        int maximumScroll = contentHeight - viewportHeight;
+
+        if (maximumScroll <= 0) {
+            indicator.setVisibility(android.view.View.GONE);
+            return;
+        }
+
+        indicator.setVisibility(android.view.View.VISIBLE);
+
+        int availableTravel =
+            indicator.getHeight() - thumb.getHeight();
+
+        if (availableTravel <= 0) {
+            thumb.setTranslationY(0);
+            return;
+        }
+
+        float scrollFraction =
+            scroll.getScrollY() / (float) maximumScroll;
+
+        scrollFraction = Math.max(
+            0.0f,
+            Math.min(1.0f, scrollFraction)
+        );
+
+        thumb.setTranslationY(
+            Math.round(availableTravel * scrollFraction)
+        );
+    }
+
+
+    private void showSnapshotListDialog(
+        String instanceName,
+        JSONObject instanceItem,
+        JSONArray snapshots
+    ) {
         Dialog dialog = new Dialog(this);
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
 
@@ -3343,19 +3984,99 @@ ensureDeviceId();
         outer.setBackground(makeGlassBackground(0xEE10233F, 0xDD08111F, 0xFF38BDF8, 2, 24));
 
         TextView title = new TextView(this);
-        title.setText("Snapshots: " + instanceName);
+        title.setText("Manage Snapshots: " + instanceName);
         title.setTextSize(18);
         title.setTypeface(Typeface.DEFAULT_BOLD);
         title.setTextColor(0xFFFFFFFF);
-        title.setPadding(0, 0, 0, 18);
+        title.setPadding(0, 0, 0, 8);
         outer.addView(title);
 
-        ScrollView scroll = new ScrollView(this);
-        LinearLayout.LayoutParams scrollParams = new LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            (int) (getResources().getDisplayMetrics().heightPixels * 0.35f)
+        TextView restoreNote = new TextView(this);
+        restoreNote.setText(
+            "Only the newest snapshot can be restored directly.\n" +
+            "Delete newer snapshots first to restore an older one."
         );
+        restoreNote.setTextSize(12);
+        restoreNote.setTextColor(0xFF94A3B8);
+        restoreNote.setPadding(0, 0, 0, 6);
+        outer.addView(restoreNote);
+
+        LinearLayout scrollContainer = new LinearLayout(this);
+        scrollContainer.setOrientation(LinearLayout.HORIZONTAL);
+
+        LinearLayout.LayoutParams scrollContainerParams =
+            new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                (int) (
+                    getResources()
+                        .getDisplayMetrics()
+                        .heightPixels * 0.48f
+                )
+            );
+        scrollContainer.setLayoutParams(scrollContainerParams);
+
+        ScrollView scroll = new ScrollView(this);
+        scroll.setVerticalScrollBarEnabled(false);
+        scroll.setFillViewport(true);
+        scroll.setClipToPadding(false);
+        scroll.setPadding(0, 0, 8, 0);
+
+        LinearLayout.LayoutParams scrollParams =
+            new LinearLayout.LayoutParams(
+                0,
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                1.0f
+            );
         scroll.setLayoutParams(scrollParams);
+
+        android.widget.FrameLayout scrollIndicator =
+            new android.widget.FrameLayout(this);
+
+        LinearLayout.LayoutParams indicatorParams =
+            new LinearLayout.LayoutParams(
+                10,
+                LinearLayout.LayoutParams.MATCH_PARENT
+            );
+        indicatorParams.setMargins(6, 0, 0, 0);
+        scrollIndicator.setLayoutParams(indicatorParams);
+
+        android.view.View scrollTrack = new android.view.View(this);
+        scrollTrack.setBackground(
+            makeGlassBackground(
+                0x55334155,
+                0x33334155,
+                0x5538BDF8,
+                1,
+                8
+            )
+        );
+
+        android.widget.FrameLayout.LayoutParams trackParams =
+            new android.widget.FrameLayout.LayoutParams(
+                android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                android.widget.FrameLayout.LayoutParams.MATCH_PARENT
+            );
+        scrollTrack.setLayoutParams(trackParams);
+        scrollIndicator.addView(scrollTrack);
+
+        android.view.View scrollThumb = new android.view.View(this);
+        scrollThumb.setBackground(
+            makeGlassBackground(
+                0xFF38BDF8,
+                0xFF0EA5E9,
+                0xFFFFFFFF,
+                1,
+                8
+            )
+        );
+
+        android.widget.FrameLayout.LayoutParams thumbParams =
+            new android.widget.FrameLayout.LayoutParams(
+                android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                64
+            );
+        scrollThumb.setLayoutParams(thumbParams);
+        scrollIndicator.addView(scrollThumb);
 
         LinearLayout list = new LinearLayout(this);
         list.setOrientation(LinearLayout.VERTICAL);
@@ -3368,8 +4089,27 @@ ensureDeviceId();
             empty.setPadding(12, 8, 12, 8);
             list.addView(empty);
         } else {
+            java.util.List<JSONObject> sortedSnapshots =
+                new java.util.ArrayList<>();
+
             for (int i = 0; i < snapshots.length(); i++) {
                 JSONObject snapshot = snapshots.optJSONObject(i);
+
+                if (snapshot != null) {
+                    sortedSnapshots.add(snapshot);
+                }
+            }
+
+            java.util.Collections.sort(
+                sortedSnapshots,
+                (left, right) -> Long.compare(
+                    snapshotCreationTimeMillis(right),
+                    snapshotCreationTimeMillis(left)
+                )
+            );
+
+            for (int i = 0; i < sortedSnapshots.size(); i++) {
+                JSONObject snapshot = sortedSnapshots.get(i);
                 if (snapshot == null) {
                     continue;
                 }
@@ -3379,26 +4119,220 @@ ensureDeviceId();
                     continue;
                 }
 
+                LinearLayout snapshotItemRow = new LinearLayout(this);
+                snapshotItemRow.setOrientation(LinearLayout.HORIZONTAL);
+                snapshotItemRow.setPadding(14, 10, 14, 10);
+                snapshotItemRow.setBackground(
+                    makeGlassBackground(
+                        0xCC1F2937,
+                        0xAA111827,
+                        0x5538BDF8,
+                        1,
+                        18
+                    )
+                );
+
+                LinearLayout.LayoutParams snapshotRowParams =
+                    new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    );
+                snapshotRowParams.setMargins(0, 0, 0, 12);
+                snapshotItemRow.setLayoutParams(snapshotRowParams);
+
                 TextView item = new TextView(this);
                 item.setText(snapshotName);
                 item.setTextSize(16);
                 item.setTextColor(0xFFFFFFFF);
-                item.setPadding(18, 16, 18, 16);
-                item.setBackground(makeGlassBackground(0xCC1F2937, 0xAA111827, 0x5538BDF8, 1, 18));
+                item.setPadding(8, 12, 12, 12);
 
-                LinearLayout.LayoutParams itemParams = new LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
+                LinearLayout.LayoutParams itemTextParams =
+                    new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    );
+                item.setLayoutParams(itemTextParams);
+
+                LinearLayout actions = new LinearLayout(this);
+                actions.setOrientation(LinearLayout.HORIZONTAL);
+                actions.setLayoutParams(
+                    new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    )
                 );
-                itemParams.setMargins(0, 0, 0, 12);
-                item.setLayoutParams(itemParams);
 
-                list.addView(item);
+                boolean isLatestSnapshot = i == 0;
+
+                Button restoreButton = null;
+
+                if (isLatestSnapshot) {
+                    restoreButton = makeSnapshotManagementButton(
+                        "Restore",
+                        false
+                    );
+
+                    restoreButton.setOnClickListener(v ->
+                        showDarkSnapshotConfirmation(
+                            dialog,
+                            instanceItem,
+                            instanceName,
+                            snapshotName,
+                            "Restore Snapshot",
+                            "Restore " +
+                                instanceName +
+                                " to snapshot \"" +
+                                snapshotName +
+                                "\"?\n\n" +
+                                "The instance's current state will be replaced. " +
+                                "This cannot be undone unless another snapshot exists.",
+                            () -> restoreInstanceSnapshot(
+                                instanceItem,
+                                snapshotName
+                            )
+                        )
+                    );
+                }
+
+                Button renameButton = makeSnapshotManagementButton(
+                    "Rename",
+                    false
+                );
+
+                renameButton.setOnClickListener(v ->
+                    showDarkRenameSnapshotDialog(
+                        dialog,
+                        instanceItem,
+                        instanceName,
+                        snapshotName
+                    )
+                );
+
+                Button deleteButton = makeSnapshotManagementButton(
+                    "Delete",
+                    true
+                );
+
+                deleteButton.setOnClickListener(v ->
+                    showDarkSnapshotConfirmation(
+                        dialog,
+                        instanceItem,
+                        instanceName,
+                        snapshotName,
+                        "Delete Snapshot",
+                        "Permanently delete snapshot \"" +
+                            snapshotName +
+                            "\" from " +
+                            instanceName +
+                            "?\n\nThis action cannot be undone.",
+                        () -> deleteInstanceSnapshot(
+                            instanceItem,
+                            snapshotName
+                        )
+                    )
+                );
+
+                if (restoreButton != null) {
+                    actions.addView(restoreButton);
+                }
+
+                actions.addView(renameButton);
+                actions.addView(deleteButton);
+
+                LinearLayout snapshotContent = new LinearLayout(this);
+                snapshotContent.setOrientation(LinearLayout.VERTICAL);
+
+                LinearLayout.LayoutParams snapshotContentParams =
+                    new LinearLayout.LayoutParams(
+                        0,
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                        1.0f
+                    );
+
+                snapshotContent.setLayoutParams(snapshotContentParams);
+                snapshotContent.addView(item);
+                snapshotContent.addView(actions);
+
+                snapshotItemRow.addView(snapshotContent);
+                list.addView(snapshotItemRow);
             }
         }
 
         scroll.addView(list);
-        outer.addView(scroll);
+        scrollContainer.addView(scroll);
+        scrollContainer.addView(scrollIndicator);
+        outer.addView(scrollContainer);
+
+        scroll.getViewTreeObserver().addOnGlobalLayoutListener(() -> {
+            android.view.View child = scroll.getChildAt(0);
+
+            if (child == null) {
+                scrollIndicator.setVisibility(
+                    android.view.View.GONE
+                );
+                return;
+            }
+
+            int viewportHeight = scroll.getHeight();
+            int contentHeight = child.getHeight();
+
+            if (
+                viewportHeight <= 0 ||
+                contentHeight <= viewportHeight
+            ) {
+                scrollIndicator.setVisibility(
+                    android.view.View.GONE
+                );
+                return;
+            }
+
+            scrollIndicator.setVisibility(
+                android.view.View.VISIBLE
+            );
+
+            int trackHeight = scrollIndicator.getHeight();
+
+            if (trackHeight <= 0) {
+                return;
+            }
+
+            int minimumThumbHeight = 48;
+
+            int calculatedThumbHeight = Math.max(
+                minimumThumbHeight,
+                Math.round(
+                    trackHeight *
+                    (viewportHeight / (float) contentHeight)
+                )
+            );
+
+            calculatedThumbHeight = Math.min(
+                calculatedThumbHeight,
+                trackHeight
+            );
+
+            android.widget.FrameLayout.LayoutParams params =
+                (android.widget.FrameLayout.LayoutParams)
+                    scrollThumb.getLayoutParams();
+
+            params.height = calculatedThumbHeight;
+            scrollThumb.setLayoutParams(params);
+
+            updateSnapshotScrollThumb(
+                scroll,
+                scrollIndicator,
+                scrollThumb
+            );
+        });
+
+        scroll.setOnScrollChangeListener(
+            (view, scrollX, scrollY, oldScrollX, oldScrollY) ->
+                updateSnapshotScrollThumb(
+                    scroll,
+                    scrollIndicator,
+                    scrollThumb
+                )
+        );
 
         Button close = new Button(this);
         close.setText("Close");

@@ -4,6 +4,18 @@
 
 The project is designed for homelab and small infrastructure environments where you want safe mobile access to Incus without exposing direct Incus credentials to every device.
 
+## Latest Release
+
+### Server v1.5.0
+
+Server `v1.5.0` improves resilience when Incus remotes are offline or unhealthy and adds complete admin snapshot-management API support.
+
+### Android Client v0.6.0
+
+Android `v0.6.0` adds full snapshot management for authorized Admin clients, including taking, restoring, renaming, and deleting snapshots.
+
+The Android client and server are versioned independently. Android `v0.6.0` is published as an asset on the server `v1.5.0` GitHub release.
+
 ## Screenshot
 
 ![ScottiBYTE Incus Mobile Server Admin Dashboard](screenshots/scottibyte-incus-mobile-server-dashboard.png)
@@ -16,10 +28,13 @@ The project is designed for homelab and small infrastructure environments where 
 - Viewer, Operator, and Admin role policy
 - Global mobile actions safety switch
 - Incus server management from the web UI
-- Server online/offline visibility
-- Instance inventory across configured Incus servers
+- Concurrent inventory scanning across configured Incus remotes
+- Partial inventory results when one or more remotes are unavailable
+- Distinct Online, Offline, No Quorum, and Inventory Error states
+- TCP reachability checks for unavailable Incus remotes
 - Start, stop, and restart controls for authorized mobile clients
 - Admin-only mobile shell access
+- Admin-only snapshot creation, restore, rename, and deletion
 - Protected instance support
 - Recent Activity audit log
 - Adjustable audit display length
@@ -50,7 +65,7 @@ The server maintains its own mobile client authorization database and Incus clie
 |---|---|
 | Viewer | Read-only inventory access |
 | Operator | Start, stop, and restart instances |
-| Admin | Start, stop, restart, and shell access |
+| Admin | Start, stop, restart, shell access, and snapshot management |
 
 The server also includes a global mobile action switch. When disabled, mobile clients remain read-only and the server rejects mobile action requests.
 
@@ -256,6 +271,40 @@ Mobile clients appear in the admin dashboard as pending clients until authorized
 - Admin
 
 Mobile inventory and operation endpoints require an approved mobile bearer token. The health endpoint is public so the Android app can verify basic connectivity before pairing.
+
+## Snapshot Management
+
+Authorized Admin clients can manage instance snapshots from the Android app.
+
+Available operations include:
+
+- Take Snapshot
+- View snapshots from newest to oldest
+- Restore the newest snapshot
+- Rename snapshots
+- Delete snapshots
+
+Only the newest snapshot is offered for direct restore. On storage backends such as ZFS, restoring an older snapshot requires removing snapshots created after it. The Android interface therefore hides Restore on older snapshots rather than offering an operation that Incus would normally reject.
+
+Snapshot operations require:
+
+- An approved Admin mobile client
+- Global mobile actions enabled
+- A target instance that is not protected
+- A reachable Incus server with working inventory access
+
+## Remote Availability and Partial Inventory
+
+The server scans configured Incus remotes concurrently.
+
+If one remote is unavailable or an Incus cluster has lost quorum, available remotes can still return inventory. Remote states distinguish between:
+
+- Online
+- Offline
+- No Quorum
+- Inventory Error
+
+This prevents one unavailable server or cluster member from blocking the complete mobile inventory request.
 
 ## Audit Log
 
