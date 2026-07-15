@@ -1821,7 +1821,7 @@ ensureDeviceId();
         if (!role.isEmpty()) {
             mobileClientRole = role;
             prefs.edit().putString(PREF_CLIENT_ROLE, role).apply();
-            updateHeaderDetailsView();
+            runOnUiThread(this::updateHeaderDetailsView);
         }
     }
 
@@ -3697,7 +3697,7 @@ ensureDeviceId();
 
         conn.setRequestMethod(method);
         conn.setConnectTimeout(8000);
-        conn.setReadTimeout(15000);
+        conn.setReadTimeout(30000);
         conn.setRequestProperty("Accept", "application/json");
 
         if (bearerToken != null && !bearerToken.trim().isEmpty()) {

@@ -694,7 +694,8 @@ function applyTcpReachabilityToFailure(failure, tcpResult) {
         status: 'Inventory Error',
         reason: 'inventory_error',
         host_reachable: true,
-        inventory_available: false
+        inventory_available: false,
+        message: 'The Incus server is reachable, but its inventory could not be retrieved.'
       };
     }
   }
@@ -712,7 +713,8 @@ function applyTcpReachabilityToFailure(failure, tcpResult) {
       status: 'Offline',
       reason: 'host_unreachable',
       host_reachable: false,
-      inventory_available: false
+      inventory_available: false,
+      message: 'The Incus server could not be reached on its configured API port.'
     };
   }
 
@@ -721,8 +723,11 @@ function applyTcpReachabilityToFailure(failure, tcpResult) {
 
 
 function classifyRemoteFailure(error) {
-  const message = String(error?.message || error || 'Remote inventory query failed');
-  const lower = message.toLowerCase();
+  const details = String(
+    error?.message || error || 'Remote inventory query failed'
+  );
+
+  const lower = details.toLowerCase();
 
   if (
     lower.includes('no available cowsql leader') ||
@@ -734,7 +739,8 @@ function classifyRemoteFailure(error) {
       reason: 'cluster_no_quorum',
       host_reachable: true,
       inventory_available: false,
-      message
+      message: 'This cluster member is reachable, but the Incus cluster does not currently have quorum.',
+      details
     };
   }
 
@@ -753,7 +759,8 @@ function classifyRemoteFailure(error) {
       reason: 'host_unreachable',
       host_reachable: false,
       inventory_available: false,
-      message
+      message: 'The Incus server could not be reached on its configured API port.',
+      details
     };
   }
 
@@ -762,7 +769,8 @@ function classifyRemoteFailure(error) {
     reason: 'inventory_error',
     host_reachable: null,
     inventory_available: false,
-    message
+    message: 'The Incus server responded, but its inventory could not be retrieved.',
+    details
   };
 }
 
@@ -817,7 +825,8 @@ async function testRemote(name) {
       tcp_reachable: tcpResult.reachable,
       tcp_host: tcpResult.host || null,
       tcp_port: tcpResult.port || null,
-      error: failure.message
+      error: failure.message,
+      details: failure.details || null
     };
   }
 }
@@ -1137,7 +1146,8 @@ async function getAllInstances() {
       tcp_reachable: scan.tcpResult?.reachable ?? null,
       tcp_host: scan.tcpResult?.host || null,
       tcp_port: scan.tcpResult?.port || null,
-      message: failure.message
+      message: failure.message,
+      details: failure.details || null
     });
   });
 
