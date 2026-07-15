@@ -50,6 +50,110 @@ function normalizeRemotes(data) {
   return [];
 }
 
+function buildSummaryFromInstances(instances) {
+  const rows = Array.isArray(instances) ? instances : [];
+  const valid = rows.filter((item) => item && item.error !== true);
+
+  const running = valid.filter((item) => item.status === 'Running').length;
+  const stopped = valid.filter((item) => item.status === 'Stopped').length;
+
+  return {
+    containers_total: valid.filter((item) => item.type === 'container').length,
+    virtual_machines_total: valid.filter(
+      (item) => item.type === 'virtual-machine'
+    ).length,
+    instances_total: valid.length,
+    running,
+    stopped,
+    not_running: valid.length - running,
+    errors: rows.filter((item) => item && item.error === true).length
+  };
+}
+
+
+function buildRemoteTestsFromInventory(remotes, instances) {
+  const tests = {};
+  const instanceCounts = {};
+  const rows = Array.isArray(instances) ? instances : [];
+
+  /*
+   * Start every configured server as Online with zero instances.
+   *
+   * getAllInstances() returns an error record for every failed server.
+   * Therefore, a configured server with no matching inventory or error row
+   * completed successfully and simply has zero instances.
+   */
+  (Array.isArray(remotes) ? remotes : []).forEach((remote) => {
+    const name = remote?.name;
+    if (!name) return;
+
+    tests[name] = {
+      ok: true,
+      name,
+      status: 'Online',
+      reason: null,
+      reachable: true,
+      host_reachable: true,
+      inventory_available: true,
+      instances_count: 0
+    };
+
+    instanceCounts[name] = 0;
+  });
+
+  rows.forEach((item) => {
+    if (!item) return;
+
+    const name = item.remote;
+    if (!name) return;
+
+    if (item.error === true) {
+      tests[name] = {
+        ok: false,
+        name,
+        status: item.status || 'Inventory Error',
+        reason: item.reason || 'inventory_error',
+        reachable: false,
+        host_reachable:
+          item.host_reachable === true
+            ? true
+            : item.host_reachable === false
+              ? false
+              : null,
+        inventory_available: false,
+        instances_count: null,
+        error: item.message || 'Remote inventory query failed'
+      };
+
+      return;
+    }
+
+    instanceCounts[name] = (instanceCounts[name] || 0) + 1;
+
+    if (!tests[name]) {
+      tests[name] = {
+        ok: true,
+        name,
+        status: 'Online',
+        reason: null,
+        reachable: true,
+        host_reachable: true,
+        inventory_available: true,
+        instances_count: 0
+      };
+    }
+  });
+
+  Object.entries(instanceCounts).forEach(([name, count]) => {
+    if (tests[name]?.inventory_available === true) {
+      tests[name].instances_count = count;
+    }
+  });
+
+  return tests;
+}
+
+
 function getValue(row, key) {
   switch (key) {
     case 'memory_display':
@@ -101,6 +205,8 @@ function statusBubble(status) {
   const value = String(status || '-');
   if (value === 'Running' || value === 'approved' || value === 'Online') return bubble(value, 'good');
   if (value === 'Stopped' || value === 'revoked' || value === 'Offline') return bubble(value, 'bad');
+  if (value === 'No Quorum') return bubble(value, 'warn');
+  if (value === 'Inventory Error') return bubble(value, 'warn');
   if (value === 'pending' || value === 'Not tested') return bubble(value, 'warn');
   return bubble(value, 'neutral');
 }
@@ -224,7 +330,17 @@ function renderSummary() {
   const errorsEl = $('errorsTotal');
   const totalRemotes = Array.isArray(state.remotes) ? state.remotes.length : 0;
   const testedRemoteNames = Object.keys(state.remoteTests || {});
-  const onlineRemotes = testedRemoteNames.filter((name) => state.remoteTests[name]?.reachable === true).length;
+  const hostReachableRemotes = testedRemoteNames.filter((name) => {
+    const test = state.remoteTests[name];
+    return test?.host_reachable === true || test?.reachable === true;
+  }).length;
+
+  const inventoryAvailableRemotes = testedRemoteNames.filter((name) => {
+    const test = state.remoteTests[name];
+    return test?.inventory_available === true ||
+      (test?.inventory_available == null && test?.reachable === true);
+  }).length;
+
   const testedRemotes = testedRemoteNames.length;
 
   if (!totalRemotes) {
@@ -234,8 +350,14 @@ function renderSummary() {
     errorsEl.textContent = 'Checking';
     errorsEl.classList.remove('has-errors');
   } else {
-    errorsEl.textContent = `${onlineRemotes} / ${totalRemotes} Online`;
-    errorsEl.classList.toggle('has-errors', onlineRemotes < totalRemotes);
+    errorsEl.textContent =
+      `${hostReachableRemotes} / ${totalRemotes} Reachable · ` +
+      `${inventoryAvailableRemotes} / ${totalRemotes} Inventory`;
+
+    errorsEl.classList.toggle(
+      'has-errors',
+      inventoryAvailableRemotes < totalRemotes
+    );
   }
 
   const summaryCards = $('summaryCards');
@@ -244,7 +366,7 @@ function renderSummary() {
     if (errorCard) {
       errorCard.classList.toggle(
         'has-errors',
-        totalRemotes > 0 && testedRemotes >= totalRemotes && onlineRemotes < totalRemotes
+        totalRemotes > 0 && testedRemotes >= totalRemotes && inventoryAvailableRemotes < totalRemotes
       );
     }
   }
@@ -257,10 +379,12 @@ function renderRemotes() {
   const remoteRows = rows.map((r) => {
     const test = state.remoteTests[r.name];
     const status = test
-      ? (test.reachable ? statusBubble('Online') : statusBubble('Offline'))
+      ? statusBubble(test.status || (test.reachable ? 'Online' : 'Offline'))
       : bubble('Checking', 'neutral');
 
-    const count = test && test.reachable ? test.instances_count : '-';
+    const count = test?.inventory_available
+      ? test.instances_count
+      : '-';
 
     return `
       <tr>
@@ -294,7 +418,6 @@ function renderRemotes() {
   renderIgnoredRemotes();
   updateSortIndicators('remotesTable', state.remoteSort);
   reapplyTableSelection('remotesTable');
-  autoTestRemotes();
 }
 
 function renderIgnoredRemotes() {
@@ -1101,9 +1224,20 @@ async function resetClientPairing(id, btn) {
 
 async function loadData() {
   try {
-    const [health, summaryData, remotesData, instancesData, clientsData, operationsData, operationsPreviewData] = await Promise.all([
+    /*
+     * Fetch inventory only once. The previous implementation requested both
+     * /summary and /instances, even though both endpoints independently ran
+     * getAllInstances(). renderRemotes() then started another remote test pass.
+     */
+    const [
+      health,
+      remotesData,
+      instancesData,
+      clientsData,
+      operationsData,
+      operationsPreviewData
+    ] = await Promise.all([
       fetchJson('/api/mobile/health'),
-      fetchJson('/api/admin/summary'),
       fetchJson('/api/admin/remotes'),
       fetchJson('/api/admin/instances'),
       fetchJson('/api/admin/clients'),
@@ -1112,13 +1246,22 @@ async function loadData() {
     ]);
 
     state.health = health;
-    state.appTimeZone = health.app_time_zone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-    state.summary = summaryData.summary || {};
+    state.appTimeZone =
+      health.app_time_zone ||
+      Intl.DateTimeFormat().resolvedOptions().timeZone ||
+      'UTC';
+
     state.remotes = normalizeRemotes(remotesData);
-    state.remoteTests = {};
-    state.remoteAutoTests = {};
     state.ignoredRemotes = remotesData.ignored || [];
     state.instances = instancesData.instances || [];
+
+    state.summary = buildSummaryFromInstances(state.instances);
+    state.remoteTests = buildRemoteTestsFromInventory(
+      state.remotes,
+      state.instances
+    );
+
+    state.remoteAutoTests = {};
     state.clients = clientsData.clients || [];
     state.operations = operationsData.operations || [];
     state.operationsPreview = [];

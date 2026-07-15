@@ -1,10 +1,11 @@
 const { spawn, execFileSync } = require('child_process');
+const net = require('net');
 const fs = require('fs');
 const path = require('path');
 const { Client } = require('ssh2');
 const { getMobileActionsStatus } = require('./operations');
 
-function runIncus(args, timeoutMs = 30000) {
+function runIncus(args, timeoutMs = 15000) {
   return new Promise((resolve, reject) => {
     const child = spawn('incus', args, {
       stdio: ['ignore', 'pipe', 'pipe']
@@ -12,9 +13,28 @@ function runIncus(args, timeoutMs = 30000) {
 
     let stdout = '';
     let stderr = '';
+    let settled = false;
+    let timedOut = false;
+    let forceKillTimer = null;
 
-    const timer = setTimeout(() => {
+    const timeoutTimer = setTimeout(() => {
+      timedOut = true;
+
       child.kill('SIGTERM');
+
+      forceKillTimer = setTimeout(() => {
+        child.kill('SIGKILL');
+      }, 2000);
+
+      // Do not keep Node alive solely for the cleanup timer.
+      forceKillTimer.unref?.();
+
+      if (!settled) {
+        settled = true;
+        reject(new Error(
+          `Incus command timed out after ${timeoutMs} ms | argv: incus ${args.join(' ')}`
+        ));
+      }
     }, timeoutMs);
 
     child.stdout.on('data', (data) => {
@@ -26,12 +46,28 @@ function runIncus(args, timeoutMs = 30000) {
     });
 
     child.on('error', (err) => {
-      clearTimeout(timer);
-      reject(err);
+      clearTimeout(timeoutTimer);
+
+      if (forceKillTimer) {
+        clearTimeout(forceKillTimer);
+      }
+
+      if (!settled) {
+        settled = true;
+        reject(err);
+      }
     });
 
     child.on('close', (code, signal) => {
-      clearTimeout(timer);
+      clearTimeout(timeoutTimer);
+
+      if (forceKillTimer) {
+        clearTimeout(forceKillTimer);
+      }
+
+      if (settled || timedOut) {
+        return;
+      }
 
       if (code !== 0) {
         const details = [
@@ -42,10 +78,12 @@ function runIncus(args, timeoutMs = 30000) {
           `argv: incus ${args.join(' ')}`
         ].filter(Boolean).join(' | ');
 
+        settled = true;
         reject(new Error(details));
         return;
       }
 
+      settled = true;
       resolve(stdout);
     });
   });
@@ -533,8 +571,211 @@ async function removeRemote(name) {
   };
 }
 
+
+function getRemoteTcpEndpoint(remote) {
+  const rawAddress = String(remote?.addr || '').trim();
+
+  if (!rawAddress) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(
+      rawAddress.includes('://')
+        ? rawAddress
+        : `https://${rawAddress}`
+    );
+
+    return {
+      host: parsed.hostname,
+      port: Number(parsed.port || 8443)
+    };
+  } catch {
+    /*
+     * Fall back to a simple host[:port] parser. IPv6 addresses returned by
+     * Incus should normally arrive as proper URLs and use the URL path above.
+     */
+    const withoutScheme = rawAddress.replace(/^https?:\/\//i, '');
+    const hostPort = withoutScheme.split('/')[0];
+    const lastColon = hostPort.lastIndexOf(':');
+
+    if (lastColon > 0 && hostPort.indexOf(':') == lastColon) {
+      const host = hostPort.slice(0, lastColon);
+      const port = Number(hostPort.slice(lastColon + 1));
+
+      return {
+        host,
+        port: Number.isInteger(port) && port > 0 ? port : 8443
+      };
+    }
+
+    return {
+      host: hostPort,
+      port: 8443
+    };
+  }
+}
+
+
+function probeRemoteTcp(remote, timeoutMs = 2000) {
+  return new Promise((resolve) => {
+    const endpoint = getRemoteTcpEndpoint(remote);
+
+    if (!endpoint?.host) {
+      resolve({
+        reachable: null,
+        error: 'Remote address is unavailable'
+      });
+      return;
+    }
+
+    let finished = false;
+
+    const socket = net.createConnection({
+      host: endpoint.host,
+      port: endpoint.port
+    });
+
+    const finish = (reachable, error = null) => {
+      if (finished) return;
+      finished = true;
+
+      socket.destroy();
+
+      resolve({
+        reachable,
+        host: endpoint.host,
+        port: endpoint.port,
+        error
+      });
+    };
+
+    socket.setTimeout(timeoutMs);
+
+    socket.once('connect', () => {
+      finish(true);
+    });
+
+    socket.once('timeout', () => {
+      finish(false, `TCP connection timed out after ${timeoutMs} ms`);
+    });
+
+    socket.once('error', (err) => {
+      finish(false, err.message);
+    });
+  });
+}
+
+
+function applyTcpReachabilityToFailure(failure, tcpResult) {
+  if (!failure || !tcpResult) {
+    return failure;
+  }
+
+  /*
+   * A successful TCP connection proves that the host and Incus listener are
+   * reachable. An inventory timeout therefore cannot correctly mean Offline.
+   */
+  if (tcpResult.reachable === true) {
+    if (failure.reason === 'cluster_no_quorum') {
+      return {
+        ...failure,
+        host_reachable: true,
+        inventory_available: false
+      };
+    }
+
+    if (
+      failure.reason === 'host_unreachable' ||
+      failure.reason === 'inventory_error'
+    ) {
+      return {
+        ...failure,
+        status: 'Inventory Error',
+        reason: 'inventory_error',
+        host_reachable: true,
+        inventory_available: false
+      };
+    }
+  }
+
+  /*
+   * If the Incus TCP listener cannot be reached, classify the remote Offline
+   * unless the command already returned an explicit no-quorum response.
+   */
+  if (
+    tcpResult.reachable === false &&
+    failure.reason !== 'cluster_no_quorum'
+  ) {
+    return {
+      ...failure,
+      status: 'Offline',
+      reason: 'host_unreachable',
+      host_reachable: false,
+      inventory_available: false
+    };
+  }
+
+  return failure;
+}
+
+
+function classifyRemoteFailure(error) {
+  const message = String(error?.message || error || 'Remote inventory query failed');
+  const lower = message.toLowerCase();
+
+  if (
+    lower.includes('no available cowsql leader') ||
+    lower.includes('failed to create cowsql connection') ||
+    lower.includes('failed to begin transaction')
+  ) {
+    return {
+      status: 'No Quorum',
+      reason: 'cluster_no_quorum',
+      host_reachable: true,
+      inventory_available: false,
+      message
+    };
+  }
+
+  if (
+    lower.includes('no route to host') ||
+    lower.includes('connection refused') ||
+    lower.includes('network is unreachable') ||
+    lower.includes('name or service not known') ||
+    lower.includes('temporary failure in name resolution') ||
+    lower.includes('connection timed out') ||
+    lower.includes('i/o timeout') ||
+    lower.includes('incus command timed out')
+  ) {
+    return {
+      status: 'Offline',
+      reason: 'host_unreachable',
+      host_reachable: false,
+      inventory_available: false,
+      message
+    };
+  }
+
+  return {
+    status: 'Inventory Error',
+    reason: 'inventory_error',
+    host_reachable: null,
+    inventory_available: false,
+    message
+  };
+}
+
 async function testRemote(name) {
   const safeName = validateRemoteName(name);
+  const inventory = await getRemoteInventory();
+  const remote = inventory.managed.find((item) => item.name === safeName);
+
+  if (!remote) {
+    throw new Error(`Managed remote "${safeName}" not found`);
+  }
+
+  const tcpProbePromise = probeRemoteTcp(remote);
 
   try {
     const stdout = await runIncus([
@@ -543,22 +784,40 @@ async function testRemote(name) {
       '--all-projects',
       '--format',
       'json'
-    ], 30000);
+    ], 15000);
 
     const instances = JSON.parse(stdout);
 
     return {
       ok: true,
       name: safeName,
+      status: 'Online',
+      reason: null,
       reachable: true,
+      host_reachable: true,
+      inventory_available: true,
       instances_count: Array.isArray(instances) ? instances.length : 0
     };
   } catch (err) {
+    const tcpResult = await tcpProbePromise;
+    const failure = applyTcpReachabilityToFailure(
+      classifyRemoteFailure(err),
+      tcpResult
+    );
+
     return {
       ok: false,
       name: safeName,
+      status: failure.status,
+      reason: failure.reason,
       reachable: false,
-      error: err.message
+      host_reachable: failure.host_reachable,
+      inventory_available: false,
+      instances_count: null,
+      tcp_reachable: tcpResult.reachable,
+      tcp_host: tcpResult.host || null,
+      tcp_port: tcpResult.port || null,
+      error: failure.message
     };
   }
 }
@@ -823,21 +1082,64 @@ function formatUsedTotal(used, total) {
 
 async function getAllInstances() {
   const remotes = await getRemotes();
+
+  const scans = await Promise.all(
+    remotes.map(async (remote) => {
+      /*
+       * Start the TCP probe immediately so it runs during the inventory
+       * request rather than adding another delay after a 15-second timeout.
+       */
+      const tcpProbePromise = probeRemoteTcp(remote);
+
+      try {
+        const instances = await getInstancesForRemote(remote);
+
+        return {
+          remote,
+          instances,
+          error: null,
+          tcpResult: await tcpProbePromise
+        };
+      } catch (err) {
+        return {
+          remote,
+          instances: null,
+          error: err,
+          tcpResult: await tcpProbePromise
+        };
+      }
+    })
+  );
+
   const results = [];
 
-  for (const remote of remotes) {
-    try {
-      const instances = await getInstancesForRemote(remote);
-      results.push(...instances);
-    } catch (err) {
-      results.push({
-        id: `${remote.name}:error`,
-        remote: remote.name,
-        error: true,
-        message: err.message
-      });
+  scans.forEach((scan) => {
+    const remote = scan.remote;
+
+    if (!scan.error) {
+      results.push(...scan.instances);
+      return;
     }
-  }
+
+    const failure = applyTcpReachabilityToFailure(
+      classifyRemoteFailure(scan.error),
+      scan.tcpResult
+    );
+
+    results.push({
+      id: `${remote.name}:error`,
+      remote: remote.name,
+      error: true,
+      status: failure.status,
+      reason: failure.reason,
+      host_reachable: failure.host_reachable,
+      inventory_available: false,
+      tcp_reachable: scan.tcpResult?.reachable ?? null,
+      tcp_host: scan.tcpResult?.host || null,
+      tcp_port: scan.tcpResult?.port || null,
+      message: failure.message
+    });
+  });
 
   return results.sort((a, b) => {
     if (a.error && !b.error) return 1;

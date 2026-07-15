@@ -611,8 +611,14 @@ router.post('/remotes/:name/test', async (req, res) => {
       });
     }
 
-    res.status(result.ok ? 200 : 502).json({
-      ok: result.ok,
+    /*
+     * The diagnostic request itself completed successfully even when the
+     * remote is offline or its cluster has no quorum. Return HTTP 200 so the
+     * Admin Console can use the structured test status instead of replacing
+     * it with a generic fetch error.
+     */
+    res.status(200).json({
+      ok: true,
       test: result
     });
   } catch (err) {

@@ -1989,6 +1989,7 @@ ensureDeviceId();
 
             java.util.HashSet<String> servers = new java.util.HashSet<>();
             java.util.HashSet<String> reachableServers = new java.util.HashSet<>();
+            java.util.HashSet<String> inventoryServers = new java.util.HashSet<>();
 
             int running = 0;
             int stopped = 0;
@@ -2009,10 +2010,16 @@ ensureDeviceId();
 
                 if (item.optBoolean("error")) {
                     errors++;
+
+                    if (item.optBoolean("host_reachable", false)) {
+                        reachableServers.add(remote);
+                    }
+
                     continue;
                 }
 
                 reachableServers.add(remote);
+                inventoryServers.add(remote);
 
                 String status = item.optString("status", "");
                 if ("Running".equalsIgnoreCase(status)) {
@@ -2024,7 +2031,8 @@ ensureDeviceId();
 
             headerStatsView.setText(
                 servers.size() + " servers / " +
-                reachableServers.size() + " reachable\n" +
+                reachableServers.size() + " reachable / " +
+                inventoryServers.size() + " inventory\n" +
                 running + " running / " +
                 stopped + " stopped" +
                 (errors > 0 ? " / " + errors + " inventory errors" : "")
@@ -2061,13 +2069,25 @@ ensureDeviceId();
 
                     int[] row = counts.get(remote);
                     if (row == null) {
-                        // total, running, stopped, errors
-                        row = new int[] {0, 0, 0, 0};
+                        // total, running, stopped, errors, remote status
+                        // remote status: 0=normal, 1=offline, 2=no quorum, 3=inventory error
+                        row = new int[] {0, 0, 0, 0, 0};
                         counts.put(remote, row);
                     }
 
                     if (item.optBoolean("error")) {
                         row[3]++;
+
+                        String reason = item.optString("reason", "");
+
+                        if ("cluster_no_quorum".equals(reason)) {
+                            row[4] = 2;
+                        } else if ("host_unreachable".equals(reason)) {
+                            row[4] = 1;
+                        } else {
+                            row[4] = 3;
+                        }
+
                         continue;
                     }
 
@@ -2164,8 +2184,12 @@ ensureDeviceId();
                 row[1] + " running / " +
                 row[2] + " stopped";
 
-            if (row[3] > 0) {
-                serverStats += "\n" + row[3] + (row[3] == 1 ? " remote query issue" : " remote query issues");
+            if (row[4] == 2) {
+                serverStats += "\nStatus: No quorum";
+            } else if (row[4] == 1) {
+                serverStats += "\nStatus: Offline";
+            } else if (row[4] == 3) {
+                serverStats += "\nStatus: Inventory error";
             }
 
             countsView.setText(serverStats);
@@ -2501,7 +2525,8 @@ ensureDeviceId();
             String name = item.optString("name", item.optString("instance", item.optString("id", "")));
             String type = item.optString("type", "");
             String status = item.optString("status", "");
-            String error = item.optString("error", "");
+            String errorMessage = item.optString("message", "");
+            String reason = item.optString("reason", "");
             String instanceKey = getInstanceKey(item);
             boolean selected = !selectedInstanceKey.isEmpty() && selectedInstanceKey.equals(instanceKey);
 
@@ -2518,7 +2543,7 @@ ensureDeviceId();
 
             boolean running = "Running".equalsIgnoreCase(status);
             boolean stopped = "Stopped".equalsIgnoreCase(status);
-            boolean hasError = item.optBoolean("error") || !error.isEmpty();
+            boolean hasError = item.optBoolean("error") || !errorMessage.isEmpty();
 
             GradientDrawable background = new GradientDrawable();
             background.setCornerRadius(32);
@@ -2543,14 +2568,27 @@ ensureDeviceId();
             card.setBackground(background);
 
             TextView title = new TextView(this);
-            title.setText(remote + ":" + name);
+            title.setText(hasError ? remote : remote + ":" + name);
             title.setTextSize(17);
             title.setTypeface(Typeface.DEFAULT_BOLD);
             title.setTextColor(0xFFFFFFFF);
 
             TextView meta = new TextView(this);
             if (hasError) {
-                meta.setText("ERROR: " + (error.isEmpty() ? "unknown error" : error));
+                String statusLabel;
+
+                if ("cluster_no_quorum".equals(reason)) {
+                    statusLabel = "NO QUORUM";
+                } else if ("host_unreachable".equals(reason)) {
+                    statusLabel = "HOST UNREACHABLE";
+                } else {
+                    statusLabel = "INVENTORY ERROR";
+                }
+
+                meta.setText(
+                    statusLabel +
+                    (errorMessage.isEmpty() ? "" : "\n" + errorMessage)
+                );
             } else {
                 StringBuilder metaText = new StringBuilder();
                 metaText.append(status.isEmpty() ? "Unknown" : status)
